@@ -341,6 +341,275 @@ async function verifyRequestAuth(req, res, { superadminOnly = false } = {}) {
   return identity;
 }
 
+function normalizeUsernameInput(raw) {
+  const cleaned = String(raw || '').trim().replace(/^@+/, '').toLowerCase();
+  if (!cleaned) return '';
+  if (!/^[a-z0-9._-]{3,32}$/.test(cleaned)) return null;
+  return cleaned;
+}
+
+function parseLoginIdentifier(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { kind: 'invalid' };
+  if (trimmed.includes('@') && !trimmed.startsWith('@')) {
+    const email = trimmed.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { kind: 'invalid' };
+    return { kind: 'email', email };
+  }
+  const username = normalizeUsernameInput(trimmed);
+  if (!username) return { kind: 'invalid' };
+  return { kind: 'username', username };
+}
+
+async function resolveProfileByUsername(supa, serviceKey, username) {
+  const r = await fetchWithTimeout(
+    `${supa.url}/rest/v1/profiles?username=ilike.${encodeURIComponent(username)}&select=user_id,email,auth_email,username,status&limit=1`,
+    {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    },
+    6000
+  );
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
+}
+
+async function signInSupabasePassword(supa, email, password) {
+  const r = await fetchWithTimeout(
+    `${supa.url}/auth/v1/token?grant_type=password`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: supa.publishableKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    },
+    8000
+  );
+  const data = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data };
+}
+
+async function handleAuthLogin(body, res) {
+  const supa = readSupabasePublicConfig();
+  if (!supa.enabled) {
+    sendJson(res, 503, { ok: false, error: 'Supabase no está configurado en el servidor.' });
+    return;
+  }
+
+  const parsed = parseLoginIdentifier(body?.identifier || body?.email || body?.username);
+  const password = String(body?.password || '');
+  if (parsed.kind === 'invalid') {
+    sendJson(res, 400, { ok: false, error: 'Ingresa un correo válido o un usuario (3-32 caracteres: letras, números, . _ -).' });
+    return;
+  }
+  if (!password) {
+    sendJson(res, 400, { ok: false, error: 'Ingresa tu contraseña.' });
+    return;
+  }
+
+  const serviceKey = getServiceRoleKey();
+  let targetEmail = parsed.kind === 'email' ? parsed.email : '';
+
+  if (parsed.kind === 'username') {
+    if (!serviceKey) {
+      sendJson(res, 503, {
+        ok: false,
+        error: 'Para iniciar sesión con nombre de usuario, agrega SUPABASE_SERVICE_ROLE_KEY en .env / Vercel.',
+      });
+      return;
+    }
+    const found = await resolveProfileByUsername(supa, serviceKey, parsed.username);
+    if (!found) {
+      sendJson(res, 401, { ok: false, error: 'Usuario o contraseña incorrectos.' });
+      return;
+    }
+    if (found.status === 'blocked') {
+      sendJson(res, 403, { ok: false, error: 'Tu cuenta ha sido suspendida por el administrador.' });
+      return;
+    }
+    targetEmail = (found.auth_email || found.email || '').trim();
+    if (!targetEmail) {
+      sendJson(res, 401, { ok: false, error: 'No se pudo resolver la cuenta para ese usuario.' });
+      return;
+    }
+  }
+
+  const authRes = await signInSupabasePassword(supa, targetEmail, password);
+  if (!authRes.ok || !authRes.data?.access_token) {
+    sendJson(res, 401, { ok: false, error: 'Usuario, correo o contraseña incorrectos.' });
+    return;
+  }
+
+  sendJson(res, 200, { ok: true, session: authRes.data });
+}
+
+async function handleAuthSignup(body, res) {
+  const supa = readSupabasePublicConfig();
+  if (!supa.enabled) {
+    sendJson(res, 503, { ok: false, error: 'Supabase no está configurado en el servidor.' });
+    return;
+  }
+
+  const parsed = parseLoginIdentifier(body?.identifier || body?.email || body?.username);
+  const password = String(body?.password || '');
+  const displayName = String(body?.display_name || '').trim().slice(0, 80);
+  const extraUsernameRaw = String(body?.username || '').trim();
+
+  if (parsed.kind === 'invalid') {
+    sendJson(res, 400, { ok: false, error: 'Ingresa un correo electrónico válido o un usuario como mili2777 (mín. 3 caracteres).' });
+    return;
+  }
+  if (password.length < 6) {
+    sendJson(res, 400, { ok: false, error: 'La contraseña debe tener al menos 6 caracteres.' });
+    return;
+  }
+
+  const serviceKey = getServiceRoleKey();
+  let username = '';
+  let authEmail = '';
+  let usernameOnly = false;
+
+  if (parsed.kind === 'username') {
+    username = parsed.username;
+    usernameOnly = true;
+    authEmail = `${username}@users.pelisstart.app`;
+    if (!serviceKey) {
+      sendJson(res, 503, {
+        ok: false,
+        error: 'Para crear cuentas solo con usuario (como mili2777), agrega SUPABASE_SERVICE_ROLE_KEY en .env / Vercel.',
+      });
+      return;
+    }
+  } else {
+    authEmail = parsed.email;
+    if (extraUsernameRaw) {
+      const normalized = normalizeUsernameInput(extraUsernameRaw);
+      if (!normalized) {
+        sendJson(res, 400, { ok: false, error: 'El usuario debe tener entre 3 y 32 caracteres (letras, números, . _ -).' });
+        return;
+      }
+      username = normalized;
+    } else {
+      const derived = normalizeUsernameInput(authEmail.split('@')[0]);
+      if (derived) username = derived;
+    }
+  }
+
+  if (serviceKey && username) {
+    const existing = await resolveProfileByUsername(supa, serviceKey, username);
+    if (existing) {
+      if (parsed.kind === 'username' || extraUsernameRaw) {
+        sendJson(res, 409, { ok: false, error: `El usuario "${username}" ya está registrado. Elige otro.` });
+        return;
+      }
+      username = '';
+    }
+  }
+
+  if (serviceKey) {
+    const createRes = await fetchWithTimeout(
+      `${supa.url}/auth/v1/admin/users`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: authEmail,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            display_name: displayName || username || authEmail.split('@')[0],
+            username: username || '',
+            username_only: usernameOnly ? 'true' : 'false',
+          },
+        }),
+      },
+      8000
+    );
+    const created = await createRes.json().catch(() => ({}));
+    if (!createRes.ok) {
+      sendJson(res, createRes.status, {
+        ok: false,
+        error: created?.msg || created?.message || 'No se pudo crear la cuenta.',
+      });
+      return;
+    }
+
+    const userId = created?.id || created?.user?.id;
+    if (userId) {
+      await fetchWithTimeout(
+        `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username || null,
+            email: usernameOnly ? '' : authEmail,
+            auth_email: authEmail,
+            display_name: displayName || username || authEmail.split('@')[0],
+            updated_at: new Date().toISOString(),
+          }),
+        },
+        6000
+      );
+    }
+
+    const loginAttempt = await signInSupabasePassword(supa, authEmail, password);
+    if (loginAttempt.ok && loginAttempt.data?.access_token) {
+      sendJson(res, 200, { ok: true, session: loginAttempt.data });
+      return;
+    }
+    sendJson(res, 200, { ok: true, needsLogin: true });
+    return;
+  }
+
+  // Fallback without service role (email registration via Supabase Auth)
+  const signRes = await fetchWithTimeout(
+    `${supa.url}/auth/v1/signup`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: supa.publishableKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: authEmail,
+        password,
+        data: {
+          display_name: displayName || username || authEmail.split('@')[0],
+          username: username || '',
+        },
+      }),
+    },
+    8000
+  );
+  const signData = await signRes.json().catch(() => ({}));
+  if (!signRes.ok) {
+    sendJson(res, signRes.status, {
+      ok: false,
+      error: signData?.msg || signData?.error_description || 'No se pudo crear la cuenta.',
+    });
+    return;
+  }
+  if (signData?.access_token) {
+    sendJson(res, 200, { ok: true, session: signData });
+    return;
+  }
+  sendJson(res, 200, { ok: true, needsConfirmation: true });
+}
+
 async function handleAdminListUsers(auth, res) {
   const supa = readSupabasePublicConfig();
   const serviceKey = getServiceRoleKey();
@@ -350,7 +619,7 @@ async function handleAdminListUsers(auth, res) {
   try {
     const [profRes, favRes, histRes, advRes] = await Promise.all([
       fetchWithTimeout(
-        `${supa.url}/rest/v1/profiles?select=user_id,email,display_name,role,status,preferred_provider,created_at,updated_at,last_seen_at&order=created_at.desc`,
+        `${supa.url}/rest/v1/profiles?select=user_id,email,username,display_name,role,status,preferred_provider,created_at,updated_at,last_seen_at&order=created_at.desc`,
         { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
         7000
       ),
@@ -398,6 +667,7 @@ async function handleAdminListUsers(auth, res) {
     const users = profiles.map((p) => ({
       user_id: p.user_id,
       email: p.email || '',
+      username: p.username || '',
       display_name: p.display_name || '',
       role: p.role || 'user',
       status: p.status || 'active',
@@ -423,13 +693,14 @@ async function handleAdminListUsers(auth, res) {
 async function handleAdminCreateUser(auth, body, res) {
   const supa = readSupabasePublicConfig();
   const serviceKey = getServiceRoleKey();
-  const email = String(body?.email || '').trim().toLowerCase();
+  const parsed = parseLoginIdentifier(body?.identifier || body?.email || body?.username);
   const password = String(body?.password || '');
   const displayName = String(body?.display_name || '').trim().slice(0, 80);
   const role = body?.role === 'superadmin' ? 'superadmin' : 'user';
+  const extraUsernameRaw = String(body?.username || '').trim();
 
-  if (!email || !email.includes('@')) {
-    sendJson(res, 400, { ok: false, error: 'Ingresa un correo electrónico válido.' });
+  if (parsed.kind === 'invalid') {
+    sendJson(res, 400, { ok: false, error: 'Ingresa un correo válido o un usuario como mili2777 (mín. 3 caracteres).' });
     return;
   }
   if (password.length < 6) {
@@ -437,7 +708,39 @@ async function handleAdminCreateUser(auth, body, res) {
     return;
   }
 
+  let username = '';
+  let authEmail = '';
+  let usernameOnly = false;
+  if (parsed.kind === 'username') {
+    username = parsed.username;
+    usernameOnly = true;
+    authEmail = `${username}@users.pelisstart.app`;
+    if (!serviceKey) {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Para crear usuarios sin correo desde el panel, configura SUPABASE_SERVICE_ROLE_KEY en .env / Vercel.',
+      });
+      return;
+    }
+  } else {
+    authEmail = parsed.email;
+    username = extraUsernameRaw
+      ? normalizeUsernameInput(extraUsernameRaw) || ''
+      : normalizeUsernameInput(authEmail.split('@')[0]) || '';
+  }
+
   try {
+    if (serviceKey && username) {
+      const taken = await resolveProfileByUsername(supa, serviceKey, username);
+      if (taken) {
+        if (parsed.kind === 'username' || extraUsernameRaw) {
+          sendJson(res, 409, { ok: false, error: `El usuario "${username}" ya existe.` });
+          return;
+        }
+        username = '';
+      }
+    }
+
     let createdUserId = '';
     let needsConfirmation = false;
 
@@ -452,10 +755,14 @@ async function handleAdminCreateUser(auth, body, res) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            email,
+            email: authEmail,
             password,
             email_confirm: true,
-            user_metadata: displayName ? { display_name: displayName } : {},
+            user_metadata: {
+              display_name: displayName || username || authEmail.split('@')[0],
+              username: username || '',
+              username_only: usernameOnly ? 'true' : 'false',
+            },
           }),
         },
         8000
@@ -476,9 +783,12 @@ async function handleAdminCreateUser(auth, body, res) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            email,
+            email: authEmail,
             password,
-            data: displayName ? { display_name: displayName } : {},
+            data: {
+              display_name: displayName || username || authEmail.split('@')[0],
+              username: username || '',
+            },
           }),
         },
         8000
@@ -507,8 +817,10 @@ async function handleAdminCreateUser(auth, body, res) {
           body: JSON.stringify({
             role,
             status: 'active',
-            email,
-            display_name: displayName || email.split('@')[0],
+            username: username || null,
+            email: usernameOnly ? '' : authEmail,
+            auth_email: authEmail,
+            display_name: displayName || username || authEmail.split('@')[0],
             updated_at: new Date().toISOString(),
           }),
         },
@@ -1821,6 +2133,26 @@ async function requestHandler(req, res) {
       url: supa.enabled ? supa.url : '',
       publishableKey: supa.enabled ? supa.publishableKey : '',
     });
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const body = await parseJsonRequestBody(req);
+      await handleAuthLogin(body, res);
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/auth/signup' && req.method === 'POST') {
+    try {
+      const body = await parseJsonRequestBody(req);
+      await handleAuthSignup(body, res);
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message });
+    }
     return;
   }
 

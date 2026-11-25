@@ -3081,7 +3081,11 @@ import {
         dom.profileDisplayName.textContent =
           state.userProfile?.role === 'superadmin' ? `${displayName} · Superadmin` : displayName;
       }
-      if (dom.profileEmail) dom.profileEmail.textContent = user.email || '';
+      if (dom.profileEmail) {
+        const uname = state.userProfile?.username ? `@${state.userProfile.username}` : '';
+        const realEmail = state.userProfile?.email || (!String(user.email || '').endsWith('@users.pelisstart.app') ? user.email : '');
+        dom.profileEmail.textContent = [uname, realEmail].filter(Boolean).join(' · ') || 'Cuenta activa';
+      }
       if (dom.profileNameInput) dom.profileNameInput.value = displayName;
       if (dom.profileProviderSelect) dom.profileProviderSelect.value = state.defaultProvider || '';
       if (dom.statWatchedCount) dom.statWatchedCount.textContent = String(state.history.length);
@@ -3135,6 +3139,7 @@ import {
         ? users.filter(
             (u) =>
               normalizeText(u.email).includes(q) ||
+              normalizeText(u.username).includes(q) ||
               normalizeText(u.display_name).includes(q) ||
               normalizeText(u.role).includes(q) ||
               normalizeText(u.status).includes(q)
@@ -3151,7 +3156,8 @@ import {
           const isSelf = state.user && u.user_id === state.user.id;
           const isSuper = u.role === 'superadmin';
           const isBlocked = u.status === 'blocked';
-          const displayName = u.display_name || (u.email ? u.email.split('@')[0] : 'Usuario');
+          const displayName = u.display_name || u.username || (u.email ? u.email.split('@')[0] : 'Usuario');
+          const idLine = [u.username ? `@${u.username}` : '', u.email].filter(Boolean).join(' · ') || u.user_id;
           const lastSeen = u.last_seen_at ? new Date(u.last_seen_at).toLocaleDateString('es-MX') : '—';
 
           return `
@@ -3162,7 +3168,7 @@ import {
                   <span class="admin-badge ${isSuper ? 'is-super' : 'is-user'}">${isSuper ? 'Superadmin' : 'Usuario'}</span>
                   <span class="admin-badge ${isBlocked ? 'is-blocked' : 'is-active'}">${isBlocked ? 'Bloqueado' : 'Activo'}</span>
                 </div>
-                <div class="admin-user-email">${escapeHtml(u.email || u.user_id)} · Último acceso: ${escapeHtml(lastSeen)}</div>
+                <div class="admin-user-email">${escapeHtml(idLine)} · Último acceso: ${escapeHtml(lastSeen)}</div>
                 <div class="admin-user-stats">
                   🎬 ${u.watched_titles_count} títulos · ▶ ${u.total_plays} reproducciones · ♥ ${u.favorites_count} Mi Lista · 🎁 ${u.advent_count}/24 Adviento
                 </div>
@@ -3438,11 +3444,11 @@ import {
       if (dom.adminCreateUserForm) {
         dom.adminCreateUserForm.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const email = dom.adminNewEmail?.value.trim() || '';
+          const identifier = dom.adminNewEmail?.value.trim() || '';
           const password = dom.adminNewPassword?.value || '';
           const display_name = dom.adminNewName?.value.trim() || '';
           const role = dom.adminNewRole?.value === 'superadmin' ? 'superadmin' : 'user';
-          if (!email || password.length < 6) return;
+          if (!identifier || password.length < 6) return;
 
           if (dom.adminCreateSubmitBtn) dom.adminCreateSubmitBtn.disabled = true;
           if (dom.adminCreateFeedback) {
@@ -3450,7 +3456,7 @@ import {
             dom.adminCreateFeedback.textContent = 'Creando cuenta...';
           }
           try {
-            const res = await adminCreateUser({ email, password, display_name, role });
+            const res = await adminCreateUser({ identifier, password, display_name, role });
             if (dom.adminCreateUserForm) dom.adminCreateUserForm.reset();
             if (dom.adminCreateFeedback) {
               dom.adminCreateFeedback.textContent = res.needsConfirmation
@@ -3547,8 +3553,9 @@ import {
               const res = await signUpWithEmail(email, password, displayName);
               if (!res?.session) {
                 if (dom.authFeedback) {
-                  dom.authFeedback.textContent =
-                    '✅ Cuenta creada. Revisa tu correo para confirmarla (si está activada la verificación) e inicia sesión.';
+                  dom.authFeedback.textContent = res?.needsLogin
+                    ? '✅ Cuenta creada. Ya puedes iniciar sesión con tu usuario o correo.'
+                    : '✅ Cuenta creada. Revisa tu correo para confirmarla (si está activada la verificación) e inicia sesión.';
                 }
                 return;
               }

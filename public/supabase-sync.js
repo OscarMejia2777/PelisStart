@@ -114,34 +114,56 @@ export async function initSupabaseSync(onAuthChange) {
   return initPromise;
 }
 
-export async function signInWithEmail(email, password) {
+export async function signInWithEmail(identifier, password) {
   if (!isSupabaseEnabled()) throw new Error('Supabase no está disponible en este servidor.');
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: sanitizeText(email, 160),
-    password: String(password || ''),
+  const rawId = sanitizeText(identifier, 160);
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: rawId, password: String(password || '') }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok || !data?.session?.access_token) {
+    throw new Error(data?.error || 'Usuario, correo o contraseña incorrectos.');
+  }
+  const { data: sessData, error } = await supabase.auth.setSession({
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
   });
   if (error) throw error;
-  currentSession = data?.session || null;
-  currentUser = data?.user || null;
-  return data;
+  currentSession = sessData?.session || data.session;
+  currentUser = sessData?.user || data.session.user || null;
+  return { session: currentSession, user: currentUser };
 }
 
-export async function signUpWithEmail(email, password, displayName) {
+export async function signUpWithEmail(identifier, password, displayName) {
   if (!isSupabaseEnabled()) throw new Error('Supabase no está disponible en este servidor.');
+  const rawId = sanitizeText(identifier, 160);
   const cleanName = sanitizeText(displayName, 80);
-  const { data, error } = await supabase.auth.signUp({
-    email: sanitizeText(email, 160),
-    password: String(password || ''),
-    options: {
-      data: cleanName ? { display_name: cleanName } : {},
-    },
+  const res = await fetch('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      identifier: rawId,
+      password: String(password || ''),
+      display_name: cleanName,
+    }),
   });
-  if (error) throw error;
-  if (data?.session?.user) {
-    currentSession = data.session;
-    currentUser = data.session.user;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo crear la cuenta.');
   }
-  return data;
+  if (data?.session?.access_token) {
+    const { data: sessData, error } = await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+    if (error) throw error;
+    currentSession = sessData?.session || data.session;
+    currentUser = sessData?.user || data.session.user || null;
+    return { session: currentSession, user: currentUser };
+  }
+  return { session: null, user: null, needsConfirmation: Boolean(data?.needsConfirmation), needsLogin: Boolean(data?.needsLogin) };
 }
 
 export async function signOutAccount() {
@@ -192,9 +214,12 @@ export async function syncAndHydrateCloudData({
   if (!isSupabaseEnabled() || !currentUser) return null;
 
   const userId = currentUser.id;
-  const userEmail = sanitizeText(currentUser.email || '', 200);
+  const isUsernameOnly = currentUser.user_metadata?.username_only === 'true' || String(currentUser.email || '').endsWith('@users.pelisstart.app');
+  const userEmail = isUsernameOnly ? '' : sanitizeText(currentUser.email || '', 200);
+  const metaUsername = sanitizeText(currentUser.user_metadata?.username || '', 32).toLowerCase();
   const fallbackName =
     sanitizeText(currentUser.user_metadata?.display_name, 80) ||
+    metaUsername ||
     sanitizeText(userEmail.split('@')[0], 80) ||
     'Cinéfilo';
 
@@ -204,15 +229,16 @@ export async function syncAndHydrateCloudData({
       user_id: userId,
       display_name: fallbackName,
       email: userEmail,
+      auth_email: sanitizeText(currentUser.email || '', 200),
+      username: metaUsername || null,
     },
     { onConflict: 'user_id', ignoreDuplicates: true }
   );
 
-  // Sync email / last_seen_at for active sessions
+  // Sync last_seen_at for active sessions
   await supabase
     .from('profiles')
     .update({
-      email: userEmail,
       last_seen_at: new Date().toISOString(),
     })
     .eq('user_id', userId);

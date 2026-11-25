@@ -769,22 +769,22 @@
         </div>
 
         <p class="auth-intro">
-          Guarda tus películas vistas, progreso de series, <strong>Mi Lista</strong> y días del Calendario de Adviento sincronizados en todos tus dispositivos.
+          Inicia sesión o crea tu cuenta usando tu <strong>usuario</strong> (ej. <code>mili2777</code>) o tu <strong>correo electrónico</strong> para guardar tus listas y progreso.
         </p>
 
         <form id="authForm" class="api-form">
           <div id="authNameField" class="api-field hidden">
             <div class="api-field-head">
-              <label for="authNameInput">Nombre o apodo</label>
+              <label for="authNameInput">Nombre visible (opcional)</label>
             </div>
-            <input id="authNameInput" type="text" placeholder="Ej. OscarCine" maxlength="80" autocomplete="nickname" />
+            <input id="authNameInput" type="text" placeholder="Ej. Mili o OscarCine" maxlength="80" autocomplete="nickname" />
           </div>
 
           <div class="api-field">
             <div class="api-field-head">
-              <label for="authEmailInput">Correo electrónico</label>
+              <label for="authEmailInput">Usuario o correo electrónico</label>
             </div>
-            <input id="authEmailInput" type="email" placeholder="tu@correo.com" required autocomplete="email" />
+            <input id="authEmailInput" type="text" placeholder="mili2777 o tu@correo.com" required autocomplete="username" autocapitalize="none" spellcheck="false" />
           </div>
 
           <div class="api-field">
@@ -934,7 +934,7 @@
             <span id="adminServiceNote" class="admin-note"></span>
           </div>
           <div class="admin-create-grid">
-            <input id="adminNewEmail" type="email" placeholder="correo@usuario.com" required autocomplete="off" />
+            <input id="adminNewEmail" type="text" placeholder="mili2777 o correo@usuario.com" required autocomplete="off" autocapitalize="none" spellcheck="false" />
             <div class="password-input-wrap">
               <input id="adminNewPassword" type="password" placeholder="Contraseña (mín. 6)" minlength="6" required autocomplete="new-password" />
               <button type="button" class="password-toggle-btn" data-toggle-password="adminNewPassword" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar u ocultar contraseña">

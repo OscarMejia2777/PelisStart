@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Plataforma de streaming PelisStart — Edición Navideña con Calendario de Adviento y multi-API (PlayLatinSRC, TMDB, Cinemeta, TVmaze, OMDb)",
   "private": true,
-  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

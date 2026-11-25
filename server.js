@@ -6,6 +6,7 @@ const { URL } = require('url');
 
 const PORT = Number(process.env.PORT) || 8124;
 const ROOT = __dirname;
+const PUBLIC_DIR = fs.existsSync(path.join(ROOT, 'public')) ? path.join(ROOT, 'public') : ROOT;
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const CONFIG_FILE = IS_VERCEL
   ? path.join(os.tmpdir(), 'pelisstart-api-keys.json')
@@ -1304,8 +1305,8 @@ function serveStatic(reqUrl, res) {
     return;
   }
 
-  const filePath = path.resolve(ROOT, `.${reqPath}`);
-  const rel = path.relative(ROOT, filePath);
+  const filePath = path.resolve(PUBLIC_DIR, `.${reqPath}`);
+  const rel = path.relative(PUBLIC_DIR, filePath);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
     res.statusCode = 403;
     res.end('Acceso denegado');

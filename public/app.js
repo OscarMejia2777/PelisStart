@@ -3180,9 +3180,13 @@ import {
                 <button type="button" class="btn btn-glass btn-sm" data-admin-action="toggle-status" data-user-id="${escapeHtml(u.user_id)}" ${isSelf ? 'disabled' : ''}>
                   ${isBlocked ? 'Reactivar' : 'Bloquear'}
                 </button>
-                <button type="button" class="btn btn-glass btn-sm btn-danger-soft" data-admin-action="delete-user" data-user-id="${escapeHtml(u.user_id)}" ${isSelf ? 'disabled' : ''}>
+                ${
+                  isSuper
+                    ? ''
+                    : `<button type="button" class="btn btn-glass btn-sm btn-danger-soft" data-admin-action="delete-user" data-user-id="${escapeHtml(u.user_id)}">
                   Eliminar
-                </button>
+                </button>`
+                }
               </div>
             </div>
           `;

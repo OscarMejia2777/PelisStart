@@ -900,6 +900,24 @@ async function handleAdminDeleteUser(auth, reqUrl, res) {
   }
 
   try {
+    const restAuth = serviceKey || auth.token;
+    const apiKeyHeader = serviceKey || supa.publishableKey;
+    const checkRes = await fetchWithTimeout(
+      `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}&select=user_id,role&limit=1`,
+      { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
+      6000
+    );
+    if (checkRes.ok) {
+      const checkRows = await checkRes.json();
+      if (Array.isArray(checkRows) && checkRows[0]?.role === 'superadmin') {
+        sendJson(res, 403, {
+          ok: false,
+          error: 'Las cuentas Superadmin no pueden eliminarse desde la web; solo desde Supabase.',
+        });
+        return;
+      }
+    }
+
     if (serviceKey) {
       const delRes = await fetchWithTimeout(
         `${supa.url}/auth/v1/admin/users/${encodeURIComponent(userId)}`,

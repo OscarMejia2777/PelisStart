@@ -791,7 +791,21 @@
             <div class="api-field-head">
               <label for="authPasswordInput">Contraseña</label>
             </div>
-            <input id="authPasswordInput" type="password" placeholder="Mínimo 6 caracteres" minlength="6" required autocomplete="current-password" />
+            <div class="password-input-wrap">
+              <input id="authPasswordInput" type="password" placeholder="Mínimo 6 caracteres" minlength="6" required autocomplete="current-password" />
+              <button type="button" class="password-toggle-btn" data-toggle-password="authPasswordInput" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar u ocultar contraseña">
+                <svg class="icon-eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg class="icon-eye-closed hidden" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.81 21.81 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.77 21.77 0 0 1-2.16 3.19" />
+                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div id="authFeedback" class="api-test-output hidden"></div>
@@ -921,7 +935,21 @@
           </div>
           <div class="admin-create-grid">
             <input id="adminNewEmail" type="email" placeholder="correo@usuario.com" required autocomplete="off" />
-            <input id="adminNewPassword" type="password" placeholder="Contraseña (mín. 6)" minlength="6" required autocomplete="new-password" />
+            <div class="password-input-wrap">
+              <input id="adminNewPassword" type="password" placeholder="Contraseña (mín. 6)" minlength="6" required autocomplete="new-password" />
+              <button type="button" class="password-toggle-btn" data-toggle-password="adminNewPassword" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar u ocultar contraseña">
+                <svg class="icon-eye-open" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg class="icon-eye-closed hidden" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.81 21.81 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.77 21.77 0 0 1-2.16 3.19" />
+                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              </button>
+            </div>
             <input id="adminNewName" type="text" placeholder="Nombre visible" maxlength="80" autocomplete="off" />
             <select id="adminNewRole" class="profile-select">
               <option value="user">Usuario estándar</option>

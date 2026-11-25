@@ -3388,6 +3388,22 @@ import {
     }
 
     function bindSupabaseAuthEvents() {
+      document.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('[data-toggle-password]');
+        if (!toggleBtn) return;
+        const input = document.getElementById(toggleBtn.dataset.togglePassword);
+        if (!input) return;
+        const reveal = input.type === 'password';
+        input.type = reveal ? 'text' : 'password';
+        toggleBtn.classList.toggle('is-visible', reveal);
+        toggleBtn.setAttribute('aria-pressed', String(reveal));
+        toggleBtn.setAttribute('aria-label', reveal ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        const openIcon = toggleBtn.querySelector('.icon-eye-open');
+        const closedIcon = toggleBtn.querySelector('.icon-eye-closed');
+        if (openIcon) openIcon.classList.toggle('hidden', reveal);
+        if (closedIcon) closedIcon.classList.toggle('hidden', !reveal);
+      });
+
       if (dom.accountBtn) {
         dom.accountBtn.addEventListener('click', () => {
           if (state.user) openProfileModal();

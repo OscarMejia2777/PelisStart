@@ -1,9 +1,10 @@
-// PelisStart Supabase Client & Cloud Sync Module
+// PelisStart Supabase Client, Auth Token & Cloud Sync Module
 const SUPABASE_ESM_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 let supabase = null;
 let supabaseEnabled = false;
 let currentUser = null;
+let currentSession = null;
 let initPromise = null;
 let lastPlayLoggedKey = '';
 let lastPlayLoggedAt = 0;
@@ -35,6 +36,28 @@ export function getCurrentUser() {
   return currentUser;
 }
 
+export async function getAccessToken() {
+  if (currentSession?.access_token) return currentSession.access_token;
+  if (!isSupabaseEnabled()) return '';
+  try {
+    const { data } = await supabase.auth.getSession();
+    currentSession = data?.session || null;
+    currentUser = currentSession?.user || null;
+    return currentSession?.access_token || '';
+  } catch {
+    return '';
+  }
+}
+
+export async function authFetch(url, options = {}) {
+  const token = await getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(url, { ...options, headers });
+}
+
 export async function initSupabaseSync(onAuthChange) {
   if (initPromise) return initPromise;
 
@@ -64,14 +87,19 @@ export async function initSupabaseSync(onAuthChange) {
       supabaseEnabled = true;
 
       const { data } = await supabase.auth.getSession();
-      currentUser = data?.session?.user || null;
+      currentSession = data?.session || null;
+      currentUser = currentSession?.user || null;
 
       supabase.auth.onAuthStateChange((event, session) => {
         const nextUser = session?.user || null;
         const prevId = currentUser?.id || null;
         const nextId = nextUser?.id || null;
+        currentSession = session || null;
         currentUser = nextUser;
-        if (typeof onAuthChange === 'function' && (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED' || prevId !== nextId)) {
+        if (
+          typeof onAuthChange === 'function' &&
+          (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED' || prevId !== nextId)
+        ) {
           onAuthChange(nextUser, event);
         }
       });
@@ -93,6 +121,7 @@ export async function signInWithEmail(email, password) {
     password: String(password || ''),
   });
   if (error) throw error;
+  currentSession = data?.session || null;
   currentUser = data?.user || null;
   return data;
 }
@@ -109,6 +138,7 @@ export async function signUpWithEmail(email, password, displayName) {
   });
   if (error) throw error;
   if (data?.session?.user) {
+    currentSession = data.session;
     currentUser = data.session.user;
   }
   return data;
@@ -118,6 +148,7 @@ export async function signOutAccount() {
   if (!isSupabaseEnabled()) return;
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  currentSession = null;
   currentUser = null;
 }
 
@@ -161,19 +192,30 @@ export async function syncAndHydrateCloudData({
   if (!isSupabaseEnabled() || !currentUser) return null;
 
   const userId = currentUser.id;
+  const userEmail = sanitizeText(currentUser.email || '', 200);
   const fallbackName =
     sanitizeText(currentUser.user_metadata?.display_name, 80) ||
-    sanitizeText((currentUser.email || '').split('@')[0], 80) ||
+    sanitizeText(userEmail.split('@')[0], 80) ||
     'Cinéfilo';
 
-  // Ensure profile exists cleanly
+  // Ensure profile exists cleanly (without touching role/status on existing accounts)
   await supabase.from('profiles').upsert(
     {
       user_id: userId,
       display_name: fallbackName,
+      email: userEmail,
     },
     { onConflict: 'user_id', ignoreDuplicates: true }
   );
+
+  // Sync email / last_seen_at for active sessions
+  await supabase
+    .from('profiles')
+    .update({
+      email: userEmail,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId);
 
   const [profRes, favRes, histRes, advRes] = await Promise.all([
     supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
@@ -182,7 +224,26 @@ export async function syncAndHydrateCloudData({
     supabase.from('user_advent_progress').select('*').eq('user_id', userId).eq('year', adventYear).order('day', { ascending: true }),
   ]);
 
-  const cloudProfile = profRes.data || { user_id: userId, display_name: fallbackName, preferred_provider: localProvider || '', preferred_lang: localLang || 'latino' };
+  const cloudProfile = profRes.data || {
+    user_id: userId,
+    display_name: fallbackName,
+    email: userEmail,
+    role: 'user',
+    status: 'active',
+    preferred_provider: localProvider || '',
+    preferred_lang: localLang || 'latino',
+  };
+
+  if (cloudProfile.status === 'blocked') {
+    return {
+      profile: cloudProfile,
+      blocked: true,
+      favorites: [],
+      history: [],
+      advent: [],
+    };
+  }
+
   const cloudFavRows = Array.isArray(favRes.data) ? favRes.data : [];
   const cloudHistRows = Array.isArray(histRes.data) ? histRes.data : [];
   const cloudAdvRows = Array.isArray(advRes.data) ? advRes.data : [];
@@ -259,7 +320,6 @@ export async function syncAndHydrateCloudData({
     await supabase.from('user_advent_progress').upsert(advToInsert, { onConflict: 'user_id,year,day' });
   }
 
-  // Re-read after merge if anything migrated
   const finalFavRows =
     favsToInsert.length > 0
       ? (await supabase.from('user_favorites').select('*').eq('user_id', userId).order('created_at', { ascending: false })).data || cloudFavRows
@@ -275,6 +335,7 @@ export async function syncAndHydrateCloudData({
 
   return {
     profile: cloudProfile,
+    blocked: false,
     favorites: finalFavRows,
     history: finalHistRows,
     advent: finalAdvRows,
@@ -412,10 +473,10 @@ export async function recordGlobalPlayEvent(item, episodeKey = '') {
   lastPlayLoggedKey = dedupeKey;
   lastPlayLoggedAt = now;
 
-  if (!isSupabaseEnabled()) return false;
+  if (!isSupabaseEnabled() || !currentUser) return false;
   try {
     await supabase.from('media_play_events').insert({
-      user_id: currentUser?.id || null,
+      user_id: currentUser.id,
       media_id: sanitizeText(item.id, 64),
       media_type: normalizeMediaType(item.type),
       title: sanitizeText(item.title, 240),
@@ -434,16 +495,16 @@ export async function recordGlobalPlayEvent(item, episodeKey = '') {
 
 export async function fetchGlobalTopPlayed(limit = 18) {
   try {
-    const res = await fetch(`/api/top-played?limit=${limit}`);
+    const res = await authFetch(`/api/top-played?limit=${limit}`);
     const data = await res.json();
-    if (Array.isArray(data?.items) && data.items.length > 0) {
+    if (res.ok && Array.isArray(data?.items)) {
       return data.items;
     }
   } catch {
     // Fallback to direct Supabase query if needed
   }
 
-  if (!isSupabaseEnabled()) return [];
+  if (!isSupabaseEnabled() || !currentUser) return [];
   try {
     const { data, error } = await supabase
       .from('media_play_stats')
@@ -472,4 +533,43 @@ export async function fetchGlobalTopPlayed(limit = 18) {
   } catch {
     return [];
   }
+}
+
+/* ==================== Superadmin API Client Helpers ==================== */
+export async function adminListUsers() {
+  const res = await authFetch('/api/admin/users');
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudieron cargar los usuarios.');
+  return data;
+}
+
+export async function adminCreateUser(payload) {
+  const res = await authFetch('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudo crear el usuario.');
+  return data;
+}
+
+export async function adminUpdateUser(payload) {
+  const res = await authFetch('/api/admin/users', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudo actualizar el usuario.');
+  return data;
+}
+
+export async function adminDeleteUser(userId) {
+  const res = await authFetch(`/api/admin/users?user_id=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudo eliminar el usuario.');
+  return data;
 }

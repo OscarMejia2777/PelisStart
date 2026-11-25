@@ -17,9 +17,24 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 
-<body>
+<body class="auth-checking auth-locked">
   <!-- Contenedor del Canvas de Nieve -->
   <canvas id="nieveCanvas" aria-hidden="true"></canvas>
+
+  <!-- Mandatory Auth Access Gate -->
+  <div id="accessGate" class="access-gate">
+    <div id="accessGateChecking" class="access-gate-card">
+      <img src="favicon.png?v=xmas1" alt="PelisStart" width="52" height="52" />
+      <h2>Pelis<span>Start</span></h2>
+      <p>Verificando tu sesión de acceso...</p>
+    </div>
+    <div id="accessGateBlocked" class="access-gate-card hidden">
+      <span class="pill-badge pill-accent">Acceso restringido</span>
+      <h2>Cuenta suspendida</h2>
+      <p>Tu cuenta ha sido bloqueada temporalmente por el administrador de PelisStart.</p>
+      <button id="blockedLogoutBtn" class="btn btn-play btn-sm" type="button">Cerrar sesión y cambiar de cuenta</button>
+    </div>
+  </div>
 
   <!-- Sticky Glass Navbar + Christmas Garland -->
   <header id="navbar" class="navbar">
@@ -60,6 +75,11 @@
         <button id="adventBtn" class="advent-pill-btn" type="button" title="Calendario de Adviento de películas navideñas">
           <span class="advent-pill-icon" aria-hidden="true">🎁</span>
           <span class="advent-pill-label">Adviento</span>
+        </button>
+
+        <button id="superAdminBtn" class="admin-pill-btn hidden" type="button" title="Panel Superadmin · Gestión de usuarios" aria-label="Panel Superadmin">
+          <span aria-hidden="true">🛡️</span>
+          <span class="admin-pill-label">Admin</span>
         </button>
 
         <button id="accountBtn" class="account-pill-btn" type="button" title="Cuenta y sincronización en la nube" aria-label="Mi cuenta">
@@ -131,6 +151,7 @@
             <button class="nav-link" data-section="serial" type="button">Series</button>
             <button class="nav-link" data-section="discover" type="button">Explorar en vivo</button>
             <button class="nav-link" data-section="favorites" type="button">Mi Lista</button>
+            <button id="mobileSuperAdminBtn" class="nav-link hidden" type="button">🛡️ Panel Superadmin</button>
             <button id="mobileAccountBtn" class="nav-link" type="button">Mi Cuenta</button>
           </div>
         </div>
@@ -843,6 +864,7 @@
           <div class="profile-quick-actions">
             <button id="profileGoFavBtn" class="btn btn-glass btn-sm" type="button">♥ Ver Mi Lista</button>
             <button id="profileGoAdventBtn" class="btn btn-glass btn-sm" type="button">🎁 Calendario de Adviento</button>
+            <button id="profileGoAdminBtn" class="btn btn-glass btn-sm hidden" type="button">🛡️ Panel Superadmin</button>
           </div>
 
           <div id="profileFeedback" class="api-test-output hidden"></div>
@@ -852,6 +874,69 @@
             <button id="profileSaveBtn" class="btn btn-play btn-sm" type="submit">Guardar cambios</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Superadmin Module (Only visible & accessible for role=superadmin) -->
+  <div id="superAdminModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="superAdminTitle">
+    <div class="modal-backdrop" id="superAdminBackdrop"></div>
+    <div class="modal-shell admin-modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar">
+        <div class="modal-title-group">
+          <span class="pill-badge admin-role-badge">Superadmin</span>
+          <h2 id="superAdminTitle">Gestión de Usuarios</h2>
+        </div>
+        <div class="modal-top-actions">
+          <button id="adminRefreshBtn" class="btn btn-glass btn-sm" type="button">↻ Actualizar</button>
+          <button id="closeSuperAdminBtn" class="close-btn" type="button" aria-label="Cerrar panel Superadmin">&times;</button>
+        </div>
+      </div>
+
+      <div class="api-modal-body admin-modal-body">
+        <div class="admin-kpi-grid">
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="adminTotalUsers">0</span>
+            <span class="profile-stat-lbl">Total usuarios</span>
+          </div>
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="adminActiveUsers">0</span>
+            <span class="profile-stat-lbl">Activos</span>
+          </div>
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="adminBlockedUsers">0</span>
+            <span class="profile-stat-lbl">Bloqueados</span>
+          </div>
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="adminSuperCount">0</span>
+            <span class="profile-stat-lbl">Superadmins</span>
+          </div>
+        </div>
+
+        <form id="adminCreateUserForm" class="admin-create-card">
+          <div class="admin-section-head">
+            <strong>+ Crear nueva cuenta</strong>
+            <span id="adminServiceNote" class="admin-note"></span>
+          </div>
+          <div class="admin-create-grid">
+            <input id="adminNewEmail" type="email" placeholder="correo@usuario.com" required autocomplete="off" />
+            <input id="adminNewPassword" type="password" placeholder="Contraseña (mín. 6)" minlength="6" required autocomplete="new-password" />
+            <input id="adminNewName" type="text" placeholder="Nombre visible" maxlength="80" autocomplete="off" />
+            <select id="adminNewRole" class="profile-select">
+              <option value="user">Usuario estándar</option>
+              <option value="superadmin">Superadmin</option>
+            </select>
+            <button id="adminCreateSubmitBtn" class="btn btn-play btn-sm" type="submit">Crear cuenta</button>
+          </div>
+          <div id="adminCreateFeedback" class="api-test-output hidden"></div>
+        </form>
+
+        <div class="admin-toolbar">
+          <input id="adminSearchInput" class="admin-search-input" type="search" placeholder="Filtrar por correo, nombre o rol..." autocomplete="off" />
+        </div>
+
+        <div id="adminUsersList" class="admin-users-list"></div>
       </div>
     </div>
   </div>

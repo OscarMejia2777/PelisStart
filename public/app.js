@@ -2,6 +2,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
 import {
   initSupabaseSync,
   isSupabaseEnabled,
+  authFetch,
   signInWithEmail,
   signUpWithEmail,
   signOutAccount,
@@ -14,6 +15,10 @@ import {
   cloudResetAdventYear,
   recordGlobalPlayEvent,
   fetchGlobalTopPlayed,
+  adminListUsers,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
 } from './supabase-sync.js';
 
 (() => {
@@ -47,7 +52,11 @@ import {
     topPlayedItems: [],
     user: null,
     userProfile: null,
+    authResolved: false,
+    appDataLoaded: false,
     authMode: 'login',
+    adminUsers: [],
+    adminFilter: '',
     customItemsById: new Map(),
     discoverItems: [],
     discoverSources: [],
@@ -179,6 +188,33 @@ import {
     accountAvatarBadge: document.getElementById('accountAvatarBadge'),
     accountBtnLabel: document.getElementById('accountBtnLabel'),
     mobileAccountBtn: document.getElementById('mobileAccountBtn'),
+
+    accessGate: document.getElementById('accessGate'),
+    accessGateChecking: document.getElementById('accessGateChecking'),
+    accessGateBlocked: document.getElementById('accessGateBlocked'),
+    blockedLogoutBtn: document.getElementById('blockedLogoutBtn'),
+
+    superAdminBtn: document.getElementById('superAdminBtn'),
+    mobileSuperAdminBtn: document.getElementById('mobileSuperAdminBtn'),
+    profileGoAdminBtn: document.getElementById('profileGoAdminBtn'),
+    superAdminModal: document.getElementById('superAdminModal'),
+    superAdminBackdrop: document.getElementById('superAdminBackdrop'),
+    closeSuperAdminBtn: document.getElementById('closeSuperAdminBtn'),
+    adminRefreshBtn: document.getElementById('adminRefreshBtn'),
+    adminTotalUsers: document.getElementById('adminTotalUsers'),
+    adminActiveUsers: document.getElementById('adminActiveUsers'),
+    adminBlockedUsers: document.getElementById('adminBlockedUsers'),
+    adminSuperCount: document.getElementById('adminSuperCount'),
+    adminServiceNote: document.getElementById('adminServiceNote'),
+    adminCreateUserForm: document.getElementById('adminCreateUserForm'),
+    adminNewEmail: document.getElementById('adminNewEmail'),
+    adminNewPassword: document.getElementById('adminNewPassword'),
+    adminNewName: document.getElementById('adminNewName'),
+    adminNewRole: document.getElementById('adminNewRole'),
+    adminCreateSubmitBtn: document.getElementById('adminCreateSubmitBtn'),
+    adminCreateFeedback: document.getElementById('adminCreateFeedback'),
+    adminSearchInput: document.getElementById('adminSearchInput'),
+    adminUsersList: document.getElementById('adminUsersList'),
 
     authModal: document.getElementById('authModal'),
     authModalBackdrop: document.getElementById('authModalBackdrop'),
@@ -979,7 +1015,7 @@ import {
         source: state.sourceFilter,
         page: String(state.page),
       });
-      const res = await fetch(`/api/discover?${params.toString()}`);
+      const res = await authFetch(`/api/discover?${params.toString()}`);
       const data = await res.json();
       if (data) {
         state.discoverSearchOnly = Boolean(data.searchOnly);
@@ -1016,7 +1052,7 @@ import {
     renderCatalog();
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `/api/search?q=${encodeURIComponent(trimmed)}&source=${encodeURIComponent(state.sourceFilter)}`
       );
       if (reqId !== searchReqCounter) return;
@@ -1038,7 +1074,7 @@ import {
   /* ==================== Player Modal & Enrichment ==================== */
   async function loadProviders() {
     try {
-      const res = await fetch('/api/providers');
+      const res = await authFetch('/api/providers');
       const data = await res.json();
       if (data && Array.isArray(data.providers)) {
         state.providers = data.providers;
@@ -1151,7 +1187,7 @@ import {
 
   async function enrichModalMeta(item) {
     try {
-      const res = await fetch(`/api/meta?type=${encodeURIComponent(item.type)}&id=${encodeURIComponent(item.id)}`);
+      const res = await authFetch(`/api/meta?type=${encodeURIComponent(item.type)}&id=${encodeURIComponent(item.id)}`);
       const data = await res.json();
       const meta = data?.meta;
       if (!meta || !state.modal.item || state.modal.item.id !== item.id) return;
@@ -1210,7 +1246,7 @@ import {
     if (item.type !== 'serial') return;
 
     try {
-      const res = await fetch(`/api/episodes?id=${encodeURIComponent(item.id)}`);
+      const res = await authFetch(`/api/episodes?id=${encodeURIComponent(item.id)}`);
       const data = await res.json();
       if (!state.modal.item || state.modal.item.id !== item.id) return;
       if (!data?.seasons?.length) return;
@@ -1394,7 +1430,7 @@ import {
   /* ==================== API Integrations Modal ==================== */
   async function loadApiConfig() {
     try {
-      const res = await fetch('/api/config');
+      const res = await authFetch('/api/config');
       const data = await res.json();
       if (!data?.integrations) return;
       state.apiStatus = data.integrations;
@@ -1811,7 +1847,7 @@ import {
 
     dom.clearApisBtn.addEventListener('click', async () => {
       try {
-        const res = await fetch('/api/config', {
+        const res = await authFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tmdbKey: '', omdbKey: '', rapidApiKey: '' }),
@@ -1843,7 +1879,7 @@ import {
         if (dom.rapidApiKeyInput.value.trim()) payload.rapidApiKey = dom.rapidApiKeyInput.value.trim();
         if (dom.rapidApiHostInput.value.trim()) payload.rapidApiHost = dom.rapidApiHostInput.value.trim();
 
-        const res = await fetch('/api/config/test', {
+        const res = await authFetch('/api/config/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1873,7 +1909,7 @@ import {
       if (dom.rapidApiKeyInput.value.trim()) payload.rapidApiKey = dom.rapidApiKeyInput.value.trim();
 
       try {
-        const res = await fetch('/api/config', {
+        const res = await authFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1976,12 +2012,16 @@ import {
           closeChristmasFinale();
           return;
         }
+        if (dom.superAdminModal && !dom.superAdminModal.classList.contains('hidden')) {
+          closeSuperAdminModal();
+          return;
+        }
         if (dom.profileModal && !dom.profileModal.classList.contains('hidden')) {
           closeProfileModal();
           return;
         }
         if (dom.authModal && !dom.authModal.classList.contains('hidden')) {
-          closeAuthModal();
+          if (state.user && state.userProfile?.status !== 'blocked') closeAuthModal();
           return;
         }
         if (dom.adventModal && !dom.adventModal.classList.contains('hidden')) {
@@ -1999,9 +2039,12 @@ import {
       }
       if (
         e.key === '/' &&
+        state.user &&
+        state.userProfile?.status !== 'blocked' &&
         document.activeElement !== dom.searchInput &&
         dom.playerModal.classList.contains('hidden') &&
         dom.apiModal.classList.contains('hidden') &&
+        (!dom.superAdminModal || dom.superAdminModal.classList.contains('hidden')) &&
         (!dom.authModal || dom.authModal.classList.contains('hidden')) &&
         (!dom.profileModal || dom.profileModal.classList.contains('hidden')) &&
         (!dom.adventModal || dom.adventModal.classList.contains('hidden'))
@@ -2883,13 +2926,88 @@ import {
       requestAnimationFrame(animarNieve);
     }
 
-    /* ==================== Supabase Account, Cloud Sync & Top Played ==================== */
+    /* ==================== Supabase Account, Access Gate, Superadmin & Cloud Sync ==================== */
+    function isSuperAdminUser() {
+      return Boolean(state.user && state.userProfile?.role === 'superadmin' && state.userProfile?.status !== 'blocked');
+    }
+
+    function loadProtectedAppData() {
+      if (!state.user || state.userProfile?.status === 'blocked') return;
+      if (state.appDataLoaded) return;
+      state.appDataLoaded = true;
+      updateFavBadge();
+      renderHero();
+      startHeroRotation();
+      renderCategoryRail();
+      renderCatalog();
+      loadProviders();
+      loadApiConfig();
+      loadDiscoverFeed(false);
+      loadTopPlayedFeed(true);
+    }
+
+    function applyAccessGateState() {
+      const body = document.body;
+      const isBlocked = Boolean(state.user && state.userProfile?.status === 'blocked');
+      const hasValidSession = Boolean(state.user && !isBlocked);
+
+      if (!state.authResolved) {
+        body.classList.add('auth-checking', 'auth-locked');
+        if (dom.accessGate) dom.accessGate.classList.remove('hidden');
+        if (dom.accessGateChecking) dom.accessGateChecking.classList.remove('hidden');
+        if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
+        return;
+      }
+
+      body.classList.remove('auth-checking');
+
+      if (!hasValidSession) {
+        body.classList.add('auth-locked');
+        state.appDataLoaded = false;
+        state.discoverItems = [];
+        state.topPlayedItems = [];
+        if (dom.catalogContainer) dom.catalogContainer.innerHTML = '';
+        if (dom.playerModal && !dom.playerModal.classList.contains('hidden')) closePlayer();
+        if (dom.adventModal && !dom.adventModal.classList.contains('hidden')) closeAdventModal();
+        if (dom.apiModal && !dom.apiModal.classList.contains('hidden')) closeApiModal();
+        if (dom.profileModal && !dom.profileModal.classList.contains('hidden')) closeProfileModal();
+        if (dom.superAdminModal && !dom.superAdminModal.classList.contains('hidden')) closeSuperAdminModal();
+
+        if (dom.accessGate) dom.accessGate.classList.remove('hidden');
+        if (dom.accessGateChecking) dom.accessGateChecking.classList.add('hidden');
+
+        if (isBlocked) {
+          if (dom.accessGateBlocked) dom.accessGateBlocked.classList.remove('hidden');
+          if (dom.authModal) dom.authModal.classList.add('hidden');
+        } else {
+          if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
+          openAuthModal('login');
+        }
+        return;
+      }
+
+      // Unlocked for active authenticated user
+      body.classList.remove('auth-locked');
+      if (dom.accessGate) dom.accessGate.classList.add('hidden');
+      if (dom.accessGateChecking) dom.accessGateChecking.classList.add('hidden');
+      if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
+      if (dom.authModal && !dom.authModal.classList.contains('hidden')) {
+        closeAuthModal();
+      }
+      loadProtectedAppData();
+    }
+
     function updateAccountUi() {
       const user = state.user;
+      const isSuper = isSuperAdminUser();
       const profileName =
         state.userProfile?.display_name ||
         user?.user_metadata?.display_name ||
         (user?.email ? user.email.split('@')[0] : '');
+
+      if (dom.superAdminBtn) dom.superAdminBtn.classList.toggle('hidden', !isSuper);
+      if (dom.mobileSuperAdminBtn) dom.mobileSuperAdminBtn.classList.toggle('hidden', !isSuper);
+      if (dom.profileGoAdminBtn) dom.profileGoAdminBtn.classList.toggle('hidden', !isSuper);
 
       if (dom.accountBtn) {
         dom.accountBtn.classList.toggle('is-signed-in', Boolean(user));
@@ -2939,8 +3057,13 @@ import {
 
     function closeAuthModal() {
       if (!dom.authModal) return;
+      if (!state.user || state.userProfile?.status === 'blocked') return;
       dom.authModal.classList.add('hidden');
-      if (dom.playerModal.classList.contains('hidden') && dom.adventModal.classList.contains('hidden')) {
+      if (
+        dom.playerModal.classList.contains('hidden') &&
+        dom.adventModal.classList.contains('hidden') &&
+        (!dom.superAdminModal || dom.superAdminModal.classList.contains('hidden'))
+      ) {
         document.body.style.overflow = '';
       }
     }
@@ -2954,7 +3077,10 @@ import {
         (user.email || '').split('@')[0] ||
         'Cinéfilo';
       if (dom.profileBigAvatar) dom.profileBigAvatar.textContent = displayName.charAt(0).toUpperCase();
-      if (dom.profileDisplayName) dom.profileDisplayName.textContent = displayName;
+      if (dom.profileDisplayName) {
+        dom.profileDisplayName.textContent =
+          state.userProfile?.role === 'superadmin' ? `${displayName} · Superadmin` : displayName;
+      }
       if (dom.profileEmail) dom.profileEmail.textContent = user.email || '';
       if (dom.profileNameInput) dom.profileNameInput.value = displayName;
       if (dom.profileProviderSelect) dom.profileProviderSelect.value = state.defaultProvider || '';
@@ -2982,16 +3108,133 @@ import {
     function closeProfileModal() {
       if (!dom.profileModal) return;
       dom.profileModal.classList.add('hidden');
-      if (dom.playerModal.classList.contains('hidden') && dom.adventModal.classList.contains('hidden')) {
+      if (
+        dom.playerModal.classList.contains('hidden') &&
+        dom.adventModal.classList.contains('hidden') &&
+        (!dom.superAdminModal || dom.superAdminModal.classList.contains('hidden'))
+      ) {
+        document.body.style.overflow = '';
+      }
+    }
+
+    /* ==================== Superadmin Module ==================== */
+    function renderAdminUsersList() {
+      if (!dom.adminUsersList) return;
+      const users = state.adminUsers || [];
+      const activeCount = users.filter((u) => u.status !== 'blocked').length;
+      const blockedCount = users.filter((u) => u.status === 'blocked').length;
+      const superCount = users.filter((u) => u.role === 'superadmin').length;
+
+      if (dom.adminTotalUsers) dom.adminTotalUsers.textContent = String(users.length);
+      if (dom.adminActiveUsers) dom.adminActiveUsers.textContent = String(activeCount);
+      if (dom.adminBlockedUsers) dom.adminBlockedUsers.textContent = String(blockedCount);
+      if (dom.adminSuperCount) dom.adminSuperCount.textContent = String(superCount);
+
+      const q = normalizeText(state.adminFilter);
+      const filtered = q
+        ? users.filter(
+            (u) =>
+              normalizeText(u.email).includes(q) ||
+              normalizeText(u.display_name).includes(q) ||
+              normalizeText(u.role).includes(q) ||
+              normalizeText(u.status).includes(q)
+          )
+        : users;
+
+      if (filtered.length === 0) {
+        dom.adminUsersList.innerHTML = `<div class="empty-state"><h3>Sin usuarios para mostrar</h3><p>No hay coincidencias con el filtro actual.</p></div>`;
+        return;
+      }
+
+      dom.adminUsersList.innerHTML = filtered
+        .map((u) => {
+          const isSelf = state.user && u.user_id === state.user.id;
+          const isSuper = u.role === 'superadmin';
+          const isBlocked = u.status === 'blocked';
+          const displayName = u.display_name || (u.email ? u.email.split('@')[0] : 'Usuario');
+          const lastSeen = u.last_seen_at ? new Date(u.last_seen_at).toLocaleDateString('es-MX') : '—';
+
+          return `
+            <div class="admin-user-row" data-admin-user-id="${escapeHtml(u.user_id)}">
+              <div class="admin-user-info">
+                <div class="admin-user-head">
+                  <strong>${escapeHtml(displayName)}${isSelf ? ' (Tú)' : ''}</strong>
+                  <span class="admin-badge ${isSuper ? 'is-super' : 'is-user'}">${isSuper ? 'Superadmin' : 'Usuario'}</span>
+                  <span class="admin-badge ${isBlocked ? 'is-blocked' : 'is-active'}">${isBlocked ? 'Bloqueado' : 'Activo'}</span>
+                </div>
+                <div class="admin-user-email">${escapeHtml(u.email || u.user_id)} · Último acceso: ${escapeHtml(lastSeen)}</div>
+                <div class="admin-user-stats">
+                  🎬 ${u.watched_titles_count} títulos · ▶ ${u.total_plays} reproducciones · ♥ ${u.favorites_count} Mi Lista · 🎁 ${u.advent_count}/24 Adviento
+                </div>
+              </div>
+              <div class="admin-user-actions">
+                <button type="button" class="btn btn-glass btn-sm" data-admin-action="toggle-role" data-user-id="${escapeHtml(u.user_id)}" ${isSelf ? 'disabled' : ''}>
+                  ${isSuper ? 'Pasar a Usuario' : 'Hacer Superadmin'}
+                </button>
+                <button type="button" class="btn btn-glass btn-sm" data-admin-action="toggle-status" data-user-id="${escapeHtml(u.user_id)}" ${isSelf ? 'disabled' : ''}>
+                  ${isBlocked ? 'Reactivar' : 'Bloquear'}
+                </button>
+                <button type="button" class="btn btn-glass btn-sm btn-danger-soft" data-admin-action="delete-user" data-user-id="${escapeHtml(u.user_id)}" ${isSelf ? 'disabled' : ''}>
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    async function loadAdminUsers() {
+      if (!isSuperAdminUser() || !dom.adminUsersList) return;
+      dom.adminUsersList.innerHTML = `<div class="search-status"><span class="spinner" aria-hidden="true"></span><span>Cargando cuentas...</span></div>`;
+      try {
+        const res = await adminListUsers();
+        state.adminUsers = Array.isArray(res.users) ? res.users : [];
+        if (dom.adminServiceNote) {
+          dom.adminServiceNote.textContent = res.serviceRoleEnabled
+            ? 'Modo completo Auth Admin activo'
+            : 'Sin SUPABASE_SERVICE_ROLE_KEY: eliminar bloquea y limpia datos';
+        }
+        renderAdminUsersList();
+      } catch (err) {
+        dom.adminUsersList.innerHTML = `<div class="empty-state"><h3>Error al cargar usuarios</h3><p>${escapeHtml(err.message)}</p></div>`;
+      }
+    }
+
+    function openSuperAdminModal() {
+      if (!dom.superAdminModal || !isSuperAdminUser()) {
+        showToast('Acceso restringido: solo Superadmin');
+        return;
+      }
+      if (dom.mobileMenu) dom.mobileMenu.classList.add('hidden');
+      if (dom.adminCreateFeedback) {
+        dom.adminCreateFeedback.classList.add('hidden');
+        dom.adminCreateFeedback.textContent = '';
+      }
+      dom.superAdminModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      loadAdminUsers();
+    }
+
+    function closeSuperAdminModal() {
+      if (!dom.superAdminModal) return;
+      dom.superAdminModal.classList.add('hidden');
+      if (
+        dom.playerModal.classList.contains('hidden') &&
+        dom.adventModal.classList.contains('hidden') &&
+        dom.profileModal.classList.contains('hidden')
+      ) {
         document.body.style.overflow = '';
       }
     }
 
     async function hydrateFromSupabaseUser(user, notifyToast = false) {
       state.user = user;
+      state.authResolved = true;
       if (!user) {
         state.userProfile = null;
         updateAccountUi();
+        applyAccessGateState();
         return;
       }
 
@@ -3015,6 +3258,12 @@ import {
 
         if (synced) {
           state.userProfile = synced.profile || null;
+          if (synced.blocked || synced.profile?.status === 'blocked') {
+            updateAccountUi();
+            applyAccessGateState();
+            return;
+          }
+
           if (synced.profile?.preferred_provider && !state.defaultProvider) {
             state.defaultProvider = synced.profile.preferred_provider;
             localStorage.setItem(STORAGE_KEYS.provider, state.defaultProvider);
@@ -3113,16 +3362,18 @@ import {
 
         if (notifyToast) {
           const name = state.userProfile?.display_name || user.email || 'tu cuenta';
-          showToast(`☁️ Sesión sincronizada como ${name}`);
+          showToast(`☁️ Bienvenido, ${name}`);
         }
       } catch {
         // Keep local data intact on transient network failure
       } finally {
         updateAccountUi();
+        applyAccessGateState();
       }
     }
 
     async function loadTopPlayedFeed(shouldRender = true) {
+      if (!state.user || state.userProfile?.status === 'blocked') return;
       const items = await fetchGlobalTopPlayed(18);
       if (!Array.isArray(items)) return;
       state.topPlayedItems = items;
@@ -3149,6 +3400,104 @@ import {
           else openAuthModal('login');
         });
       }
+      if (dom.superAdminBtn) dom.superAdminBtn.addEventListener('click', openSuperAdminModal);
+      if (dom.mobileSuperAdminBtn) dom.mobileSuperAdminBtn.addEventListener('click', openSuperAdminModal);
+      if (dom.profileGoAdminBtn) {
+        dom.profileGoAdminBtn.addEventListener('click', () => {
+          closeProfileModal();
+          openSuperAdminModal();
+        });
+      }
+      if (dom.superAdminBackdrop) dom.superAdminBackdrop.addEventListener('click', closeSuperAdminModal);
+      if (dom.closeSuperAdminBtn) dom.closeSuperAdminBtn.addEventListener('click', closeSuperAdminModal);
+      if (dom.adminRefreshBtn) dom.adminRefreshBtn.addEventListener('click', loadAdminUsers);
+
+      if (dom.adminSearchInput) {
+        dom.adminSearchInput.addEventListener('input', () => {
+          state.adminFilter = dom.adminSearchInput.value || '';
+          renderAdminUsersList();
+        });
+      }
+
+      if (dom.adminCreateUserForm) {
+        dom.adminCreateUserForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const email = dom.adminNewEmail?.value.trim() || '';
+          const password = dom.adminNewPassword?.value || '';
+          const display_name = dom.adminNewName?.value.trim() || '';
+          const role = dom.adminNewRole?.value === 'superadmin' ? 'superadmin' : 'user';
+          if (!email || password.length < 6) return;
+
+          if (dom.adminCreateSubmitBtn) dom.adminCreateSubmitBtn.disabled = true;
+          if (dom.adminCreateFeedback) {
+            dom.adminCreateFeedback.classList.remove('hidden');
+            dom.adminCreateFeedback.textContent = 'Creando cuenta...';
+          }
+          try {
+            const res = await adminCreateUser({ email, password, display_name, role });
+            if (dom.adminCreateUserForm) dom.adminCreateUserForm.reset();
+            if (dom.adminCreateFeedback) {
+              dom.adminCreateFeedback.textContent = res.needsConfirmation
+                ? '✅ Usuario creado. Debe confirmar su correo si la verificación por email está activa.'
+                : '✅ Usuario creado y activado correctamente.';
+            }
+            await loadAdminUsers();
+          } catch (err) {
+            if (dom.adminCreateFeedback) {
+              dom.adminCreateFeedback.textContent = `❌ ${err.message}`;
+            }
+          } finally {
+            if (dom.adminCreateSubmitBtn) dom.adminCreateSubmitBtn.disabled = false;
+          }
+        });
+      }
+
+      if (dom.adminUsersList) {
+        dom.adminUsersList.addEventListener('click', async (e) => {
+          const btn = e.target.closest('[data-admin-action]');
+          if (!btn || btn.disabled) return;
+          const action = btn.dataset.adminAction;
+          const userId = btn.dataset.userId;
+          const target = state.adminUsers.find((u) => u.user_id === userId);
+          if (!target) return;
+
+          btn.disabled = true;
+          try {
+            if (action === 'toggle-role') {
+              const nextRole = target.role === 'superadmin' ? 'user' : 'superadmin';
+              await adminUpdateUser({ user_id: userId, role: nextRole });
+              showToast(`Rol actualizado a ${nextRole}`);
+            } else if (action === 'toggle-status') {
+              const nextStatus = target.status === 'blocked' ? 'active' : 'blocked';
+              await adminUpdateUser({ user_id: userId, status: nextStatus });
+              showToast(nextStatus === 'blocked' ? 'Usuario bloqueado' : 'Usuario reactivado');
+            } else if (action === 'delete-user') {
+              const label = target.email || target.display_name || userId;
+              if (!window.confirm(`¿Eliminar o suspender permanentemente la cuenta "${label}"?`)) {
+                btn.disabled = false;
+                return;
+              }
+              const del = await adminDeleteUser(userId);
+              showToast(del.mode === 'auth_deleted' ? 'Usuario eliminado de Auth' : 'Cuenta bloqueada y datos limpiados');
+            }
+            await loadAdminUsers();
+          } catch (err) {
+            showToast(`❌ ${err.message}`);
+            btn.disabled = false;
+          }
+        });
+      }
+
+      if (dom.blockedLogoutBtn) {
+        dom.blockedLogoutBtn.addEventListener('click', async () => {
+          await signOutAccount().catch(() => {});
+          state.user = null;
+          state.userProfile = null;
+          updateAccountUi();
+          applyAccessGateState();
+        });
+      }
+
       if (dom.authModalBackdrop) dom.authModalBackdrop.addEventListener('click', closeAuthModal);
       if (dom.closeAuthModalBtn) dom.closeAuthModalBtn.addEventListener('click', closeAuthModal);
       if (dom.authGuestBtn) dom.authGuestBtn.addEventListener('click', closeAuthModal);
@@ -3174,7 +3523,7 @@ import {
           if (dom.authSubmitBtn) dom.authSubmitBtn.disabled = true;
           if (dom.authFeedback) {
             dom.authFeedback.classList.remove('hidden');
-            dom.authFeedback.textContent = state.authMode === 'signup' ? 'Creando cuenta...' : 'Iniciando sesión...';
+            dom.authFeedback.textContent = state.authMode === 'signup' ? 'Creando cuenta...' : 'Verificando acceso...';
           }
 
           try {
@@ -3188,18 +3537,16 @@ import {
                 return;
               }
               await hydrateFromSupabaseUser(res.session.user, true);
-              closeAuthModal();
             } else {
               const res = await signInWithEmail(email, password);
               if (res?.user) {
                 await hydrateFromSupabaseUser(res.user, true);
               }
-              closeAuthModal();
             }
           } catch (err) {
             if (dom.authFeedback) {
               dom.authFeedback.classList.remove('hidden');
-              dom.authFeedback.textContent = `❌ ${err?.message || 'No se pudo autenticar.'}`;
+              dom.authFeedback.textContent = `❌ ${err?.message || 'Credenciales incorrectas o cuenta no válida.'}`;
             }
           } finally {
             if (dom.authSubmitBtn) dom.authSubmitBtn.disabled = false;
@@ -3263,6 +3610,7 @@ import {
             state.userProfile = null;
             updateAccountUi();
             closeProfileModal();
+            applyAccessGateState();
             showToast('Sesión cerrada');
           } catch (err) {
             showToast(`Error: ${err?.message || 'No se pudo cerrar sesión'}`);
@@ -3275,27 +3623,33 @@ import {
     function init() {
       updateFavBadge();
       updateAccountUi();
-      renderHero();
-      startHeroRotation();
-      renderCategoryRail();
-      renderCatalog();
+      applyAccessGateState();
       bindEvents();
       initSnowfall();
-      loadProviders();
-      loadApiConfig();
-      loadDiscoverFeed(false);
-      loadTopPlayedFeed(true);
       initSupabaseSync(async (user, event) => {
         if (user) {
           await hydrateFromSupabaseUser(user, event === 'SIGNED_IN');
         } else {
+          state.authResolved = true;
           state.user = null;
           state.userProfile = null;
           updateAccountUi();
+          applyAccessGateState();
         }
-      }).then(async ({ user }) => {
-        if (user && !state.user) {
+      }).then(async ({ enabled, user }) => {
+        state.authResolved = true;
+        if (!enabled) {
+          if (dom.authFeedback) {
+            dom.authFeedback.classList.remove('hidden');
+            dom.authFeedback.textContent = '⚠️ Autenticación obligatoria: falta configurar Supabase en el servidor.';
+          }
+          applyAccessGateState();
+          return;
+        }
+        if (user) {
           await hydrateFromSupabaseUser(user, false);
+        } else {
+          applyAccessGateState();
         }
       });
     }

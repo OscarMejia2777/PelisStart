@@ -1,4 +1,5 @@
 const http = require('http');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -250,10 +251,386 @@ function maskSecret(val) {
 function sendCorsHeaders(res, extra = {}) {
   res.writeHead(res.statusCode || 200, {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': '*',
     ...extra,
   });
+}
+
+function getServiceRoleKey() {
+  return (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim();
+}
+
+function clearAuthCache() {
+  for (const k of cache.keys()) {
+    if (String(k).startsWith('auth:')) cache.delete(k);
+  }
+}
+
+async function verifyRequestAuth(req, res, { superadminOnly = false } = {}) {
+  const supa = readSupabasePublicConfig();
+  if (!supa.enabled) {
+    sendJson(res, 503, { ok: false, error: 'Protección de acceso requiere Supabase configurado.' });
+    return null;
+  }
+
+  const authHeader = String(req.headers.authorization || '');
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1].trim() : '';
+  if (!token) {
+    sendJson(res, 401, { ok: false, error: 'Debes iniciar sesión para acceder a PelisStart.' });
+    return null;
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
+  const cacheKey = `auth:${tokenHash}`;
+  let identity = getCache(cacheKey);
+
+  if (!identity) {
+    try {
+      const userRes = await fetchWithTimeout(
+        `${supa.url}/auth/v1/user`,
+        {
+          headers: {
+            apikey: supa.publishableKey,
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        6000
+      );
+      if (!userRes.ok) {
+        sendJson(res, 401, { ok: false, error: 'Sesión inválida o expirada. Inicia sesión de nuevo.' });
+        return null;
+      }
+      const user = await userRes.json();
+      if (!user?.id) {
+        sendJson(res, 401, { ok: false, error: 'Sesión inválida.' });
+        return null;
+      }
+
+      const profRes = await fetchWithTimeout(
+        `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(user.id)}&select=user_id,email,display_name,role,status`,
+        {
+          headers: {
+            apikey: supa.publishableKey,
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        6000
+      );
+      const profRows = profRes.ok ? await profRes.json() : [];
+      const profile = Array.isArray(profRows) && profRows[0] ? profRows[0] : { user_id: user.id, role: 'user', status: 'active' };
+      identity = { user, profile, token };
+      setCache(cacheKey, identity, 15 * 1000);
+    } catch {
+      sendJson(res, 502, { ok: false, error: 'No se pudo validar tu sesión con Supabase.' });
+      return null;
+    }
+  }
+
+  if (identity.profile?.status === 'blocked') {
+    sendJson(res, 403, { ok: false, error: 'Tu cuenta está suspendida. Contacta al administrador.' });
+    return null;
+  }
+
+  if (superadminOnly && identity.profile?.role !== 'superadmin') {
+    sendJson(res, 403, { ok: false, error: 'Acceso restringido: requiere rol Superadmin.' });
+    return null;
+  }
+
+  return identity;
+}
+
+async function handleAdminListUsers(auth, res) {
+  const supa = readSupabasePublicConfig();
+  const serviceKey = getServiceRoleKey();
+  const restAuth = serviceKey || auth.token;
+  const apiKeyHeader = serviceKey || supa.publishableKey;
+
+  try {
+    const [profRes, favRes, histRes, advRes] = await Promise.all([
+      fetchWithTimeout(
+        `${supa.url}/rest/v1/profiles?select=user_id,email,display_name,role,status,preferred_provider,created_at,updated_at,last_seen_at&order=created_at.desc`,
+        { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
+        7000
+      ),
+      fetchWithTimeout(
+        `${supa.url}/rest/v1/user_favorites?select=user_id`,
+        { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
+        7000
+      ),
+      fetchWithTimeout(
+        `${supa.url}/rest/v1/user_watch_history?select=user_id,play_count`,
+        { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
+        7000
+      ),
+      fetchWithTimeout(
+        `${supa.url}/rest/v1/user_advent_progress?select=user_id`,
+        { headers: { apikey: apiKeyHeader, Authorization: `Bearer ${restAuth}` } },
+        7000
+      ),
+    ]);
+
+    if (!profRes.ok) {
+      throw new Error(`Supabase profiles HTTP ${profRes.status}`);
+    }
+
+    const profiles = (await profRes.json()) || [];
+    const favRows = favRes.ok ? (await favRes.json()) || [] : [];
+    const histRows = histRes.ok ? (await histRes.json()) || [] : [];
+    const advRows = advRes.ok ? (await advRes.json()) || [] : [];
+
+    const countBy = (rows, sumField = null) => {
+      const map = new Map();
+      for (const r of rows) {
+        if (!r?.user_id) continue;
+        const inc = sumField ? Number(r[sumField]) || 1 : 1;
+        map.set(r.user_id, (map.get(r.user_id) || 0) + inc);
+      }
+      return map;
+    };
+
+    const favMap = countBy(favRows);
+    const titleMap = countBy(histRows);
+    const playMap = countBy(histRows, 'play_count');
+    const advMap = countBy(advRows);
+
+    const users = profiles.map((p) => ({
+      user_id: p.user_id,
+      email: p.email || '',
+      display_name: p.display_name || '',
+      role: p.role || 'user',
+      status: p.status || 'active',
+      preferred_provider: p.preferred_provider || '',
+      created_at: p.created_at,
+      last_seen_at: p.last_seen_at || p.updated_at || p.created_at,
+      favorites_count: favMap.get(p.user_id) || 0,
+      watched_titles_count: titleMap.get(p.user_id) || 0,
+      total_plays: playMap.get(p.user_id) || 0,
+      advent_count: advMap.get(p.user_id) || 0,
+    }));
+
+    sendJson(res, 200, {
+      ok: true,
+      serviceRoleEnabled: Boolean(serviceKey),
+      users,
+    });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+}
+
+async function handleAdminCreateUser(auth, body, res) {
+  const supa = readSupabasePublicConfig();
+  const serviceKey = getServiceRoleKey();
+  const email = String(body?.email || '').trim().toLowerCase();
+  const password = String(body?.password || '');
+  const displayName = String(body?.display_name || '').trim().slice(0, 80);
+  const role = body?.role === 'superadmin' ? 'superadmin' : 'user';
+
+  if (!email || !email.includes('@')) {
+    sendJson(res, 400, { ok: false, error: 'Ingresa un correo electrónico válido.' });
+    return;
+  }
+  if (password.length < 6) {
+    sendJson(res, 400, { ok: false, error: 'La contraseña debe tener al menos 6 caracteres.' });
+    return;
+  }
+
+  try {
+    let createdUserId = '';
+    let needsConfirmation = false;
+
+    if (serviceKey) {
+      const adminRes = await fetchWithTimeout(
+        `${supa.url}/auth/v1/admin/users`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: displayName ? { display_name: displayName } : {},
+          }),
+        },
+        8000
+      );
+      const adminData = await adminRes.json();
+      if (!adminRes.ok) {
+        sendJson(res, adminRes.status, { ok: false, error: adminData?.msg || adminData?.message || 'Error al crear usuario.' });
+        return;
+      }
+      createdUserId = adminData?.id || adminData?.user?.id || '';
+    } else {
+      const signRes = await fetchWithTimeout(
+        `${supa.url}/auth/v1/signup`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: supa.publishableKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            data: displayName ? { display_name: displayName } : {},
+          }),
+        },
+        8000
+      );
+      const signData = await signRes.json();
+      if (!signRes.ok) {
+        sendJson(res, signRes.status, { ok: false, error: signData?.msg || signData?.error_description || 'No se pudo crear la cuenta.' });
+        return;
+      }
+      createdUserId = signData?.user?.id || signData?.id || '';
+      needsConfirmation = !signData?.session && !signData?.user?.email_confirmed_at;
+    }
+
+    if (createdUserId) {
+      const restAuth = serviceKey || auth.token;
+      const apiKeyHeader = serviceKey || supa.publishableKey;
+      await fetchWithTimeout(
+        `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(createdUserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: apiKeyHeader,
+            Authorization: `Bearer ${restAuth}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            role,
+            status: 'active',
+            email,
+            display_name: displayName || email.split('@')[0],
+            updated_at: new Date().toISOString(),
+          }),
+        },
+        6000
+      );
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      user_id: createdUserId,
+      needsConfirmation,
+    });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+}
+
+async function handleAdminPatchUser(auth, body, res) {
+  const supa = readSupabasePublicConfig();
+  const serviceKey = getServiceRoleKey();
+  const restAuth = serviceKey || auth.token;
+  const apiKeyHeader = serviceKey || supa.publishableKey;
+  const userId = String(body?.user_id || '').trim();
+
+  if (!userId) {
+    sendJson(res, 400, { ok: false, error: 'Falta user_id.' });
+    return;
+  }
+  if (userId === auth.user.id && (body?.status === 'blocked' || body?.role === 'user')) {
+    sendJson(res, 400, { ok: false, error: 'No puedes bloquear o quitar el rol superadmin a tu propia cuenta activa.' });
+    return;
+  }
+
+  const patch = { updated_at: new Date().toISOString() };
+  if (body?.role === 'user' || body?.role === 'superadmin') patch.role = body.role;
+  if (body?.status === 'active' || body?.status === 'blocked') patch.status = body.status;
+  if (typeof body?.display_name === 'string') patch.display_name = body.display_name.trim().slice(0, 80);
+
+  try {
+    const r = await fetchWithTimeout(
+      `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: apiKeyHeader,
+          Authorization: `Bearer ${restAuth}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(patch),
+      },
+      7000
+    );
+    const data = await r.json();
+    if (!r.ok) {
+      sendJson(res, r.status, { ok: false, error: data?.message || 'Error al actualizar usuario.' });
+      return;
+    }
+    clearAuthCache();
+    sendJson(res, 200, { ok: true, profile: Array.isArray(data) ? data[0] : data });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+}
+
+async function handleAdminDeleteUser(auth, reqUrl, res) {
+  const supa = readSupabasePublicConfig();
+  const serviceKey = getServiceRoleKey();
+  const userId = String(reqUrl.searchParams.get('user_id') || '').trim();
+  if (!userId) {
+    sendJson(res, 400, { ok: false, error: 'Falta user_id.' });
+    return;
+  }
+  if (userId === auth.user.id) {
+    sendJson(res, 400, { ok: false, error: 'No puedes eliminar tu propia sesión activa.' });
+    return;
+  }
+
+  try {
+    if (serviceKey) {
+      const delRes = await fetchWithTimeout(
+        `${supa.url}/auth/v1/admin/users/${encodeURIComponent(userId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+          },
+        },
+        8000
+      );
+      if (!delRes.ok) {
+        const errData = await delRes.json().catch(() => ({}));
+        sendJson(res, delRes.status, { ok: false, error: errData?.msg || 'No se pudo eliminar en Auth.' });
+        return;
+      }
+      clearAuthCache();
+      sendJson(res, 200, { ok: true, mode: 'auth_deleted' });
+      return;
+    }
+
+    // Without SUPABASE_SERVICE_ROLE_KEY: purge user app data and permanently block profile
+    const headers = { apikey: supa.publishableKey, Authorization: `Bearer ${auth.token}` };
+    await Promise.all([
+      fetchWithTimeout(`${supa.url}/rest/v1/user_favorites?user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE', headers }, 6000),
+      fetchWithTimeout(`${supa.url}/rest/v1/user_watch_history?user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE', headers }, 6000),
+      fetchWithTimeout(`${supa.url}/rest/v1/user_advent_progress?user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE', headers }, 6000),
+      fetchWithTimeout(
+        `${supa.url}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'blocked', role: 'user', updated_at: new Date().toISOString() }),
+        },
+        6000
+      ),
+    ]);
+    clearAuthCache();
+    sendJson(res, 200, { ok: true, mode: 'blocked_and_purged' });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
 }
 
 function sendJson(res, status, data) {
@@ -1447,17 +1824,56 @@ async function requestHandler(req, res) {
     return;
   }
 
+  if (reqUrl.pathname === '/api/admin/users') {
+    const auth = await verifyRequestAuth(req, res, { superadminOnly: true });
+    if (!auth) return;
+    if (req.method === 'GET') {
+      await handleAdminListUsers(auth, res);
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const body = await parseJsonRequestBody(req);
+        await handleAdminCreateUser(auth, body, res);
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err.message });
+      }
+      return;
+    }
+    if (req.method === 'PATCH') {
+      try {
+        const body = await parseJsonRequestBody(req);
+        await handleAdminPatchUser(auth, body, res);
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err.message });
+      }
+      return;
+    }
+    if (req.method === 'DELETE') {
+      await handleAdminDeleteUser(auth, reqUrl, res);
+      return;
+    }
+    sendJson(res, 405, { ok: false, error: 'Método no permitido' });
+    return;
+  }
+
   if (reqUrl.pathname === '/api/top-played' && req.method === 'GET') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleTopPlayed(reqUrl, res);
     return;
   }
 
   if (reqUrl.pathname === '/api/config' && req.method === 'GET') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     sendJson(res, 200, { ok: true, integrations: formatConfigStatus(readApiConfig()) });
     return;
   }
 
   if (reqUrl.pathname === '/api/config' && req.method === 'POST') {
+    const auth = await verifyRequestAuth(req, res, { superadminOnly: true });
+    if (!auth) return;
     try {
       const body = await parseJsonRequestBody(req);
       const updated = writeApiConfig(body);
@@ -1469,6 +1885,8 @@ async function requestHandler(req, res) {
   }
 
   if (reqUrl.pathname === '/api/config/test' && req.method === 'POST') {
+    const auth = await verifyRequestAuth(req, res, { superadminOnly: true });
+    if (!auth) return;
     try {
       const body = await parseJsonRequestBody(req);
       await handleConfigTest(body, res);
@@ -1479,31 +1897,43 @@ async function requestHandler(req, res) {
   }
 
   if (reqUrl.pathname === '/api/providers') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleProviders(res);
     return;
   }
 
   if (reqUrl.pathname === '/api/discover') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleDiscover(reqUrl, res);
     return;
   }
 
   if (reqUrl.pathname === '/api/search') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleMultiSearch(reqUrl, res);
     return;
   }
 
   if (reqUrl.pathname === '/api/meta') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleMeta(reqUrl, res);
     return;
   }
 
   if (reqUrl.pathname === '/api/episodes') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleEpisodes(reqUrl, res);
     return;
   }
 
   if (reqUrl.pathname === '/api/check') {
+    const auth = await verifyRequestAuth(req, res);
+    if (!auth) return;
     await handleCheck(reqUrl, res);
     return;
   }

@@ -1,0 +1,13 @@
+# Variables de entorno y claves privadas
+.env
+.env.*
+!.env.example
+api-keys.json
+
+# Vercel / Node / Sistema
+.vercel
+node_modules/
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db

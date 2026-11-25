@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PelisStart — Edición Navideña</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=xmas1" />
+  <link rel="icon" type="image/png" sizes="256x256" href="favicon.png?v=xmas1" />
+  <link rel="shortcut icon" href="favicon.ico?v=xmas1" />
+  <link rel="apple-touch-icon" href="favicon.png?v=xmas1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <!-- Contenedor del Canvas de Nieve -->
+  <canvas id="nieveCanvas" aria-hidden="true"></canvas>
+
+  <!-- Sticky Glass Navbar + Christmas Garland -->
+  <header id="navbar" class="navbar">
+    <div class="nav-inner">
+      <div class="nav-left">
+        <a href="#inicio" id="brandHomeBtn" class="brand" aria-label="PelisStart Inicio">
+          <img class="brand-logo-img" src="favicon.png?v=xmas1" alt="" width="38" height="38" />
+          <span class="brand-text">Pelis<span>Start</span></span>
+        </a>
+
+        <nav class="nav-links" aria-label="Navegación principal">
+          <button class="nav-link active" data-section="all" type="button">Inicio</button>
+          <button class="nav-link" data-section="movie" type="button">Películas</button>
+          <button class="nav-link" data-section="serial" type="button">Series</button>
+          <button class="nav-link" data-section="discover" type="button">Explorar en vivo</button>
+        </nav>
+      </div>
+
+      <div class="nav-right">
+        <div class="search-wrap">
+          <!-- Snow Cap SVG on Search -->
+          <svg class="search-snow-cap" viewBox="0 0 120 18" fill="none" aria-hidden="true">
+            <path
+              d="M2 14C8 4 20 2 34 6C46 9.5 55 2 70 4C84 6 93 11 104 9C110 8 115 11 118 14C108 16 94 14 82 15C68 16.5 52 13 38 15C24 17 10 16 2 14Z"
+              fill="#f8fafc" />
+          </svg>
+          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
+          </svg>
+          <input id="searchInput" type="search" placeholder="Buscar película, serie o ID (tt... / TMDB)  [/]"
+            autocomplete="off" aria-label="Buscar películas o series" />
+          <button id="clearSearchBtn" class="search-clear hidden" type="button"
+            aria-label="Limpiar búsqueda">&times;</button>
+        </div>
+
+        <label class="lang-select-wrap" title="Idioma predeterminado del reproductor">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path
+              d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <select id="globalLangSelect" aria-label="Idioma predeterminado">
+            <option value="">Auto</option>
+            <option value="latino" selected>Latino</option>
+            <option value="castellano">Castellano</option>
+            <option value="subtitulado">Subtitulado</option>
+          </select>
+        </label>
+
+        <button id="adventBtn" class="advent-pill-btn" type="button" title="Calendario de Adviento de películas navideñas">
+          <span class="advent-pill-icon" aria-hidden="true">🎁</span>
+          <span class="advent-pill-label">Adviento</span>
+        </button>
+
+        <!-- Hamburger Menu Button (Categorías + Navegación móvil) -->
+        <button id="mobileMenuBtn" class="hamburger-btn" type="button" aria-label="Abrir menú y categorías"
+          aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Christmas Pine Garland & Realistic Glowing String Lights -->
+    <div class="christmas-garland" aria-hidden="true">
+      <svg class="garland-wire" preserveAspectRatio="none" viewBox="0 0 1440 16" fill="none">
+        <path d="M0 3 Q 60 12, 120 4 T 240 4 T 360 4 T 480 4 T 600 4 T 720 4 T 840 4 T 960 4 T 1080 4 T 1200 4 T 1320 4 T 1440 4"
+          stroke="#14532d" stroke-width="3" stroke-linecap="round" />
+        <path d="M0 2 Q 60 11, 120 3 T 240 3 T 360 3 T 480 3 T 600 3 T 720 3 T 840 3 T 960 3 T 1080 3 T 1200 3 T 1320 3 T 1440 3"
+          stroke="#22c55e" stroke-width="1" stroke-dasharray="3 7" opacity="0.45" />
+      </svg>
+      <div class="garland-bulbs">
+        <span class="xmas-bulb bulb-red bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-orange bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-pink bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-orange bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-pink bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+      </div>
+    </div>
+
+    <!-- Hamburger Dropdown Drawer (Navegación + Lista de Categorías) -->
+    <div id="mobileMenu" class="mobile-menu hidden">
+      <div class="mobile-menu-inner">
+        <div class="mobile-search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
+          </svg>
+          <input id="mobileSearchInput" type="search" placeholder="Buscar película, serie o ID..." autocomplete="off" />
+        </div>
+
+        <div class="mobile-menu-section mobile-only-sections">
+          <span class="mobile-menu-label">Secciones</span>
+          <div class="mobile-nav-pills">
+            <button class="nav-link active" data-section="all" type="button">Inicio</button>
+            <button class="nav-link" data-section="movie" type="button">Películas</button>
+            <button class="nav-link" data-section="serial" type="button">Series</button>
+            <button class="nav-link" data-section="discover" type="button">Explorar en vivo</button>
+          </div>
+        </div>
+
+        <div class="mobile-menu-section">
+          <span class="mobile-menu-label">Categorías</span>
+          <div id="hamburgerCategories" class="mobile-cat-grid"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-shell">
+    <!-- Hero Spotlight with Warm Christmas Bokeh -->
+    <section id="heroSection" class="hero" aria-label="Título destacado">
+      <div id="heroBackdrop" class="hero-backdrop"></div>
+      <div class="bokeh-layer" aria-hidden="true"></div>
+      <div class="hero-scrim-x"></div>
+      <div class="hero-scrim-y"></div>
+
+      <div class="hero-content">
+        <div class="hero-meta-top">
+          <span class="pill-badge pill-accent">Destacado</span>
+          <span id="heroTypeBadge" class="pill-badge">Película</span>
+          <span class="pill-badge pill-lang">Latino · Castellano · Sub</span>
+        </div>
+
+        <h1 id="heroTitle" class="hero-title frosty-title">Cargando...</h1>
+
+        <div class="hero-stats">
+          <span id="heroRating" class="stat-rating">★ 8.5</span>
+          <span class="stat-dot">•</span>
+          <span id="heroYear">2024</span>
+          <span class="stat-dot">•</span>
+          <span id="heroDuration">2h 46m</span>
+          <span class="stat-dot">•</span>
+          <span id="heroCategories">Ciencia Ficción</span>
+        </div>
+
+        <p id="heroSynopsis" class="hero-synopsis"></p>
+
+        <div class="hero-actions">
+          <button id="heroPlayBtn" class="btn btn-play snow-capped-btn" type="button">
+            <svg class="btn-snow-cap" preserveAspectRatio="none" viewBox="0 0 180 18" fill="none" aria-hidden="true">
+              <path
+                d="M2 13C10 2 28 1 46 6C62 10 78 1 102 4C122 6.5 138 1 158 5C169 7 175 10 178 13C165 16 146 12 128 14.5C108 17 86 11 66 14.5C44 18 20 13 2 13Z"
+                fill="#f8fafc" />
+            </svg>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M8 5.14v14l11-7-11-7z" />
+            </svg>
+            <span>Reproducir ahora</span>
+          </button>
+
+          <button id="heroFavBtn" class="btn btn-glass snow-capped-btn" type="button">
+            <svg class="btn-snow-cap" preserveAspectRatio="none" viewBox="0 0 140 18" fill="none" aria-hidden="true">
+              <path
+                d="M2 13C12 3 32 2 50 7C68 12 88 2 110 5C124 7 134 10 138 13C124 15 105 12 88 14C66 16.5 42 12 24 14.5C14 16 6 15 2 13Z"
+                fill="#f8fafc" />
+            </svg>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+            </svg>
+            <span>Mi Lista</span>
+          </button>
+        </div>
+
+        <div id="heroDots" class="hero-dots" aria-label="Cambiar destacado"></div>
+      </div>
+    </section>
+
+    <!-- Main Dynamic Catalog Container -->
+    <section id="catalogContainer" class="catalog-container" aria-live="polite">
+      <!-- Rows or Grid rendered by JS -->
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <strong>Pelis<span>Start</span></strong>
+        <span class="footer-holiday-tag">• Edición Especial de Navidad ❄️</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Immersive Player Modal -->
+  <div id="playerModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+    <div class="modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar">
+        <div class="modal-title-group">
+          <span id="modalTypeBadge" class="pill-badge pill-accent">Película</span>
+          <h2 id="modalTitle">Título</h2>
+        </div>
+
+        <div class="modal-top-actions">
+          <button id="resumeBtn" class="btn btn-glass btn-sm hidden" type="button"
+            title="Reanudar desde el último punto guardado">
+            <span>Reanudar</span>
+          </button>
+          <button id="trailerToggleBtn" class="btn btn-glass btn-sm hidden" type="button">
+            <span>Ver tráiler</span>
+          </button>
+          <button id="modalFavBtn" class="btn btn-glass btn-sm" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path
+                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            <span>Guardar</span>
+          </button>
+          <button id="closeModalBtn" class="close-btn" type="button" aria-label="Cerrar reproductor">&times;</button>
+        </div>
+      </div>
+
+      <!-- Player Toolbar (Embed API, Language, Mode, Season/Episode, Server) -->
+      <div class="player-controls-bar">
+        <div class="control-group">
+          <label class="provider-wrap">
+            <span>API Reproductor:</span>
+            <select id="embedApiSelect">
+              <option value="playlatinsrc">PlayLatinSRC (Español / Sub)</option>
+              <option value="embed69">Embed69 (Español / Sub)</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="modalLangGroup" class="control-group">
+          <span class="control-label">Idioma:</span>
+          <div id="modalLangTabs" class="segmented">
+            <button type="button" class="seg-btn" data-lang="">Auto</button>
+            <button type="button" class="seg-btn active" data-lang="latino">Latino</button>
+            <button type="button" class="seg-btn" data-lang="castellano">Castellano</button>
+            <button type="button" class="seg-btn" data-lang="subtitulado">Subtitulado</button>
+          </div>
+        </div>
+
+        <div id="modalModeGroup" class="control-group">
+          <span class="control-label">Modo:</span>
+          <div id="modalModeTabs" class="segmented">
+            <button type="button" class="seg-btn active" data-mode="standard">Estándar</button>
+            <button type="button" id="downloadModeBtn" class="seg-btn" data-mode="download">Descargas</button>
+          </div>
+        </div>
+
+        <div id="customOptionsBar" class="control-group custom-options">
+          <div id="episodePicker" class="episode-picker hidden">
+            <label>Temp <input id="seasonInput" type="number" min="1" max="50" value="1" /></label>
+            <label>Ep <input id="episodeInput" type="number" min="1" max="200" value="1" /></label>
+          </div>
+
+          <label id="providerWrap" class="provider-wrap">
+            <span>Servidor:</span>
+            <select id="providerSelect">
+              <option value="">Automático</option>
+            </select>
+          </label>
+
+          <button id="applyCustomBtn" class="btn btn-accent btn-sm hidden" type="button">Aplicar</button>
+        </div>
+      </div>
+
+      <!-- Responsive Video Frame -->
+      <div class="player-viewport">
+        <iframe id="embedIframe" src="" allowfullscreen
+          allow="autoplay; fullscreen; picture-in-picture; encrypted-media" referrerpolicy="origin"></iframe>
+      </div>
+
+      <!-- Live PlayLatinSRC Telemetry Bar -->
+      <div id="playerTelemetry" class="player-telemetry hidden">
+        <span id="telemetryState" class="telemetry-pill">Reproductor conectado</span>
+        <span id="telemetrySource" class="telemetry-text"></span>
+        <span id="telemetryTime" class="telemetry-time"></span>
+      </div>
+
+      <!-- Series Season & Episode Selector (TVmaze / Cinemeta / TMDB) -->
+      <div id="seriesEpisodesPanel" class="episodes-panel hidden">
+        <div class="episodes-header">
+          <div class="episodes-title-wrap">
+            <h3>Episodios</h3>
+            <span id="episodesSourceBadge" class="imdb-tag"></span>
+          </div>
+          <div id="seasonTabs" class="season-tabs"></div>
+        </div>
+        <div id="episodesGrid" class="episodes-grid"></div>
+      </div>
+
+      <!-- Details Footer -->
+      <div class="modal-details">
+        <img id="modalPoster" class="modal-poster" src="" alt="" />
+        <div class="modal-info">
+          <div id="modalMetaRow" class="modal-meta-row"></div>
+          <div id="modalRatingsRow" class="modal-ratings-row hidden"></div>
+          <p id="modalSynopsis" class="modal-synopsis"></p>
+          <p id="modalCredits" class="modal-credits hidden"></p>
+          <p class="modal-tip">
+            Si un servidor se ve oscuro, tarda o falla, cambia el selector de <strong>API Reproductor</strong> o elige
+            otro <strong>Servidor</strong> arriba.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Integrations Modal -->
+  <div id="apiModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="apiModalTitle">
+    <div class="modal-backdrop" id="apiModalBackdrop"></div>
+    <div class="modal-shell api-modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar">
+        <div class="modal-title-group">
+          <span class="pill-badge pill-accent">Integraciones</span>
+          <h2 id="apiModalTitle">APIs conectadas en PelisStart</h2>
+        </div>
+        <button id="closeApiModalBtn" class="close-btn" type="button" aria-label="Cerrar configuración">&times;</button>
+      </div>
+
+      <div class="api-modal-body">
+        <div class="api-status-grid" id="apiActiveCards">
+          <div class="api-card is-active">
+            <div class="api-card-head">
+              <strong>PlayLatinSRC & Embed69</strong>
+              <span class="avail-badge ok">Activa</span>
+            </div>
+            <p>Reproductores en Latino, Castellano y Subtitulado, descargas, servidores y eventos
+              <code>postMessage</code>.</p>
+          </div>
+          <div class="api-card is-active">
+            <div class="api-card-head">
+              <strong>APIs Públicas (0-auth)</strong>
+              <span class="avail-badge ok">Activa</span>
+            </div>
+            <p>Cinemeta, TVmaze e IMDb Suggestion para tendencias, episodios, tráilers y búsqueda global sin clave.</p>
+          </div>
+        </div>
+
+        <form id="apiConfigForm" class="api-form">
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="tmdbKeyInput">TMDB API Key (v3) o Bearer Token (v4)</label>
+              <div class="api-field-actions">
+                <a class="api-get-link" href="https://www.themoviedb.org/settings/api" target="_blank"
+                  rel="noopener noreferrer">Obtener gratis ↗</a>
+                <span id="tmdbStatusBadge" class="avail-badge warn">Opcional</span>
+              </div>
+            </div>
+            <input id="tmdbKeyInput" type="password"
+              placeholder="Pega tu clave o Bearer token de developer.themoviedb.org" autocomplete="off" />
+            <small>Habilita tendencias, sinopsis, títulos y episodios en español latino (<code>es-MX</code>).</small>
+          </div>
+
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="omdbKeyInput">OMDb API Key</label>
+              <div class="api-field-actions">
+                <a class="api-get-link" href="https://www.omdbapi.com/apikey.aspx" target="_blank"
+                  rel="noopener noreferrer">Obtener gratis ↗</a>
+                <span id="omdbStatusBadge" class="avail-badge warn">Opcional</span>
+              </div>
+            </div>
+            <input id="omdbKeyInput" type="password" placeholder="Pega tu clave gratuita de omdbapi.com"
+              autocomplete="off" />
+            <small>Agrega puntuaciones de Rotten Tomatoes, Metacritic, clasificación por edad y premios.</small>
+          </div>
+
+          <div class="api-field-row">
+            <div class="api-field">
+              <div class="api-field-head">
+                <label for="rapidApiKeyInput">RapidAPI Key</label>
+                <div class="api-field-actions">
+                  <a class="api-get-link" href="https://rapidapi.com/SAdrian/api/moviesdatabase" target="_blank"
+                    rel="noopener noreferrer">Obtener gratis ↗</a>
+                  <span id="rapidStatusBadge" class="avail-badge warn">Opcional</span>
+                </div>
+              </div>
+              <input id="rapidApiKeyInput" type="password" placeholder="X-RapidAPI-Key (rapidapi.com)"
+                autocomplete="off" />
+            </div>
+            <div class="api-field">
+              <div class="api-field-head">
+                <label for="rapidApiHostInput">RapidAPI Host</label>
+              </div>
+              <input id="rapidApiHostInput" type="text" value="moviesdatabase.p.rapidapi.com" />
+            </div>
+          </div>
+
+          <div id="apiTestOutput" class="api-test-output hidden"></div>
+
+          <div class="api-form-actions">
+            <button id="clearApisBtn" class="btn btn-glass btn-sm" type="button">Limpiar guardadas</button>
+            <button id="testApisBtn" class="btn btn-glass btn-sm" type="button">Probar conexión</button>
+            <button id="saveApisBtn" class="btn btn-play btn-sm" type="submit">Guardar y aplicar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advent Calendar Modal (1 al 24 de Diciembre) -->
+  <div id="adventModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adventModalTitle">
+    <div class="modal-backdrop" id="adventModalBackdrop"></div>
+    <div class="modal-shell advent-modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar advent-topbar">
+        <div class="modal-title-group">
+          <span class="pill-badge pill-accent">1 – 24 Dic</span>
+          <h2 id="adventModalTitle">🎄 Calendario de Adviento Navideño</h2>
+          <span id="adventProgressBadge" class="advent-progress-pill">0 / 24 abiertas</span>
+        </div>
+        <div class="modal-top-actions">
+          <button id="adventResetBtn" class="btn btn-glass btn-sm" type="button">Envolver</button>
+          <button id="closeAdventModalBtn" class="close-btn" type="button" aria-label="Cerrar calendario">&times;</button>
+        </div>
+      </div>
+
+      <div class="advent-body">
+        <p id="adventSubtitle" class="advent-subtitle">
+          Cada película se desbloquea en su día correspondiente de diciembre (del 1 al 24).
+        </p>
+        <div id="adventGrid" class="advent-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Christmas Finale Celebration Overlay (Día 24 / Calendario completo) -->
+  <div id="christmasFinaleOverlay" class="xmas-finale-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="xmasFinaleTitle">
+    <div id="christmasFinaleBackdrop" class="xmas-finale-backdrop"></div>
+    <canvas id="xmasFireworksCanvas" class="xmas-fireworks-canvas" aria-hidden="true"></canvas>
+
+    <!-- Luces navideñas brillantes en lo alto del cielo festivo -->
+    <div class="xmas-finale-lights" aria-hidden="true">
+      <svg class="garland-wire" preserveAspectRatio="none" viewBox="0 0 1440 16" fill="none">
+        <path d="M0 3 Q 60 12, 120 4 T 240 4 T 360 4 T 480 4 T 600 4 T 720 4 T 840 4 T 960 4 T 1080 4 T 1200 4 T 1320 4 T 1440 4"
+          stroke="#14532d" stroke-width="3" stroke-linecap="round" />
+      </svg>
+      <div class="garland-bulbs">
+        <span class="xmas-bulb bulb-gold bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-orange bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-pink bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-green bulb-anim-1"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-blue bulb-anim-2"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-gold bulb-anim-3"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+        <span class="xmas-bulb bulb-red bulb-anim-4"><span class="bulb-cap"></span><span class="bulb-glass"></span></span>
+      </div>
+    </div>
+
+    <!-- Santa Claus detallado con 6 renos y estela mágica 2D -->
+    <canvas id="xmasSantaTrailCanvas" class="xmas-santa-trail-canvas" aria-hidden="true"></canvas>
+    <div id="xmasSantaOverlay" class="xmas-santa-overlay" aria-hidden="true">
+      <div id="xmasSantaRig" class="xmas-santa-rig">
+        <svg id="xmasSantaSvg" viewBox="0 0 860 250" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="sleighRed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ff3b3b"/>
+              <stop offset="48%" stop-color="#dc2626"/>
+              <stop offset="100%" stop-color="#7f1d1d"/>
+            </linearGradient>
+            <linearGradient id="sleighInside" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#5c0b0b"/>
+              <stop offset="100%" stop-color="#991b1b"/>
+            </linearGradient>
+            <linearGradient id="goldShine" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fef9c3"/>
+              <stop offset="30%" stop-color="#facc15"/>
+              <stop offset="70%" stop-color="#d97706"/>
+              <stop offset="100%" stop-color="#fef08a"/>
+            </linearGradient>
+            <linearGradient id="sackGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#b91c1c"/>
+              <stop offset="55%" stop-color="#7f1d1d"/>
+              <stop offset="100%" stop-color="#450a0a"/>
+            </linearGradient>
+            <linearGradient id="santaCoat" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ef4444"/>
+              <stop offset="65%" stop-color="#b91c1c"/>
+              <stop offset="100%" stop-color="#7f1d1d"/>
+            </linearGradient>
+            <radialGradient id="santaFace" cx="45%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#ffe4d6"/>
+              <stop offset="70%" stop-color="#f7bfa3"/>
+              <stop offset="100%" stop-color="#e2997a"/>
+            </radialGradient>
+            <linearGradient id="beardGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="75%" stop-color="#f1f5f9"/>
+              <stop offset="100%" stop-color="#cbd5e1"/>
+            </linearGradient>
+            <linearGradient id="giftBlue" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#38bdf8"/>
+              <stop offset="100%" stop-color="#1d4ed8"/>
+            </linearGradient>
+            <linearGradient id="giftGreen" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#4ade80"/>
+              <stop offset="100%" stop-color="#15803d"/>
+            </linearGradient>
+            <linearGradient id="giftPurple" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#c084fc"/>
+              <stop offset="100%" stop-color="#7e22ce"/>
+            </linearGradient>
+            <linearGradient id="giftPink" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#f472b6"/>
+              <stop offset="100%" stop-color="#be185d"/>
+            </linearGradient>
+            <linearGradient id="giftGold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fde047"/>
+              <stop offset="100%" stop-color="#ca8a04"/>
+            </linearGradient>
+            <linearGradient id="furFront" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#d4844a"/>
+              <stop offset="50%" stop-color="#a85726"/>
+              <stop offset="100%" stop-color="#6e3312"/>
+            </linearGradient>
+            <linearGradient id="furBack" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#9e5a31"/>
+              <stop offset="55%" stop-color="#743a1a"/>
+              <stop offset="100%" stop-color="#4a220d"/>
+            </linearGradient>
+            <linearGradient id="bellyFront" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fef3c7"/>
+              <stop offset="100%" stop-color="#e5b982"/>
+            </linearGradient>
+            <linearGradient id="bellyBack" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e7d0a8"/>
+              <stop offset="100%" stop-color="#b88b5a"/>
+            </linearGradient>
+            <linearGradient id="antlerGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e7c39a"/>
+              <stop offset="100%" stop-color="#7c4a27"/>
+            </linearGradient>
+            <linearGradient id="reinGlow" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#fef08a"/>
+              <stop offset="50%" stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#fde047"/>
+            </linearGradient>
+            <radialGradient id="rudolphHalo" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ff2e2e" stop-opacity="1"/>
+              <stop offset="35%" stop-color="#ff4d4d" stop-opacity="0.7"/>
+              <stop offset="70%" stop-color="#fbbf24" stop-opacity="0.28"/>
+              <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="psSoftGlow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="2.5" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Capa 1: Riendas traseras y 3 renos de fondo -->
+          <g class="reins-shimmer" opacity="0.72" filter="url(#psSoftGlow)">
+            <path d="M236 122 Q 330 144, 424 115" stroke="url(#reinGlow)" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M236 122 Q 410 150, 566 105" stroke="url(#reinGlow)" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M236 122 Q 490 152, 708 93" stroke="url(#reinGlow)" stroke-width="1.4" stroke-linecap="round"/>
+          </g>
+          <g id="xmasBackReindeerLayer"></g>
+
+          <!-- Capa 2: Trineo ornamentado, regalos y Santa Claus -->
+          <g class="sleigh-rig-inner">
+            <path d="M52 214 L232 214 C258 214, 274 198, 270 180 C268 171, 257 167, 250 174 C245 179, 249 187, 256 186" stroke="#b45309" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+            <path d="M98 188 L88 214 M192 188 L184 214" stroke="#b45309" stroke-width="4.5" stroke-linecap="round"/>
+            <path d="M58 118 C75 110, 128 112, 160 128 L234 126 C248 126, 258 138, 250 156 L225 186 L92 186 Z" fill="url(#sleighInside)"/>
+            <path d="M62 128 C44 102, 54 68, 86 64 C118 60, 146 78, 146 116 L136 154 L70 150 Z" fill="url(#sackGrad)" stroke="#450a0a" stroke-width="1.5"/>
+            <path d="M62 84 Q96 96, 134 86" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+            <path d="M58 84 C44 76, 40 94, 54 96 M58 84 C45 92, 42 106, 52 108" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+
+            <g transform="translate(62, 48) rotate(-22)">
+              <path d="M8 38 L8 12 C8 3, 22 3, 22 12" stroke="#ffffff" stroke-width="6" stroke-linecap="round" fill="none"/>
+              <path d="M8 38 L8 12 C8 3, 22 3, 22 12" stroke="#ef4444" stroke-width="6" stroke-dasharray="4 5" stroke-linecap="round" fill="none"/>
+            </g>
+            <g transform="translate(76, 58) rotate(-10)">
+              <rect x="0" y="0" width="28" height="28" rx="4" fill="url(#giftPurple)" stroke="#581c87" stroke-width="1"/>
+              <rect x="11" y="0" width="6" height="28" fill="#f472b6"/>
+              <rect x="0" y="11" width="28" height="6" fill="#f472b6"/>
+              <path d="M14 0 C7 -8, 1 -1, 10 2 M14 0 C21 -8, 27 -1, 18 2" stroke="#f9a8d4" stroke-width="2.5" fill="none"/>
+            </g>
+            <g transform="translate(102, 44) rotate(6)">
+              <rect x="0" y="0" width="32" height="32" rx="4" fill="url(#giftGold)" stroke="#a16207" stroke-width="1"/>
+              <rect x="13" y="0" width="6" height="32" fill="#dc2626"/>
+              <rect x="0" y="13" width="32" height="6" fill="#dc2626"/>
+              <path d="M16 0 C8 -9, 2 -1, 12 2 M16 0 C24 -9, 30 -1, 20 2" stroke="#ef4444" stroke-width="2.8" fill="none"/>
+            </g>
+            <g transform="translate(128, 56) rotate(16)">
+              <rect x="0" y="0" width="26" height="26" rx="4" fill="url(#giftGreen)" stroke="#14532d" stroke-width="1"/>
+              <rect x="10" y="0" width="6" height="26" fill="#facc15"/>
+              <rect x="0" y="10" width="26" height="6" fill="#facc15"/>
+              <circle cx="13" cy="0" r="3.5" fill="#fef08a"/>
+            </g>
+            <g transform="translate(86, 76) rotate(-5)">
+              <rect x="0" y="0" width="30" height="26" rx="4" fill="url(#giftBlue)" stroke="#1e3a8a" stroke-width="1"/>
+              <rect x="12" y="0" width="6" height="26" fill="#fde047"/>
+              <rect x="0" y="10" width="30" height="6" fill="#fde047"/>
+            </g>
+            <g transform="translate(114, 78) rotate(8)">
+              <rect x="0" y="0" width="25" height="24" rx="4" fill="url(#giftPink)" stroke="#831843" stroke-width="1"/>
+              <rect x="10" y="0" width="5" height="24" fill="#38bdf8"/>
+              <rect x="0" y="10" width="25" height="5" fill="#38bdf8"/>
+            </g>
+
+            <!-- Santa Claus -->
+            <g>
+              <g class="santa-wave-arm">
+                <path d="M202 108 C218 96, 228 80, 234 66" stroke="url(#santaCoat)" stroke-width="17" stroke-linecap="round"/>
+                <ellipse cx="233" cy="69" rx="9" ry="5.5" transform="rotate(-24 233 69)" fill="#f8fafc"/>
+                <circle cx="238" cy="58" r="8.5" fill="#dc2626"/>
+                <circle cx="231" cy="57" r="4" fill="#dc2626"/>
+              </g>
+              <path d="M150 156 C146 116, 166 96, 192 98 C214 100, 224 124, 218 158 Z" fill="url(#santaCoat)"/>
+              <path d="M188 108 L194 156" stroke="#f8fafc" stroke-width="7" stroke-linecap="round"/>
+              <path d="M152 138 Q186 147, 218 139" stroke="#111827" stroke-width="10" stroke-linecap="round"/>
+              <rect x="184" y="133" width="16" height="14" rx="3" fill="none" stroke="url(#goldShine)" stroke-width="3.5"/>
+              <circle cx="188" cy="80" r="19" fill="url(#santaFace)"/>
+              <ellipse cx="181" cy="83" rx="4.2" ry="2.6" fill="#fb7185" opacity="0.65"/>
+              <ellipse cx="199" cy="82" rx="4.2" ry="2.6" fill="#fb7185" opacity="0.65"/>
+              <path d="M181 75 Q184 71, 187 75" stroke="#1e293b" stroke-width="2" stroke-linecap="round" fill="none"/>
+              <path d="M194 74 Q197 70, 200 74" stroke="#1e293b" stroke-width="2" stroke-linecap="round" fill="none"/>
+              <path d="M179 70 Q184 67, 188 70" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+              <path d="M193 69 Q198 66, 202 69" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+              <circle cx="191" cy="80" r="3.4" fill="#f43f5e" opacity="0.8"/>
+              <path d="M168 82 C164 104, 174 124, 192 125 C210 124, 218 106, 211 84 C205 90, 196 92, 190 90 C182 92, 174 88, 168 82 Z" fill="url(#beardGrad)"/>
+              <path d="M176 96 Q184 114, 192 117 Q202 114, 206 96" stroke="#e2e8f0" stroke-width="2" fill="none" opacity="0.8"/>
+              <path d="M185 88 Q191 94, 197 88" fill="#9f1239"/>
+              <path d="M190 84 C182 81, 172 86, 173 91 C179 93, 186 90, 191 86 C196 90, 203 92, 209 89 C210 84, 200 80, 190 84 Z" fill="#ffffff"/>
+              <path d="M168 72 C170 50, 194 46, 207 65 Z" fill="url(#santaCoat)"/>
+              <g class="santa-hat-pom">
+                <path d="M174 58 C156 54, 146 66, 148 78" stroke="#dc2626" stroke-width="11" stroke-linecap="round" fill="none"/>
+                <circle cx="146" cy="80" r="7.5" fill="#ffffff"/>
+              </g>
+              <rect x="164" y="63" width="46" height="10" rx="5" transform="rotate(-6 187 68)" fill="#ffffff"/>
+              <path d="M174 114 C186 124, 206 126, 224 122" stroke="url(#santaCoat)" stroke-width="15" stroke-linecap="round"/>
+              <ellipse cx="222" cy="122" rx="5" ry="8" fill="#f8fafc"/>
+              <circle cx="231" cy="122" r="7.5" fill="#dc2626"/>
+            </g>
+
+            <!-- Cuerpo y patines del Trineo -->
+            <path d="M44 124 C60 112, 84 120, 96 142 C110 166, 134 166, 166 154 C194 144, 218 118, 242 120 C262 122, 270 144, 256 164 C242 184, 212 192, 166 192 L106 192 C74 192, 54 174, 46 146 C42 136, 40 128, 44 124 Z" fill="url(#sleighRed)" stroke="url(#goldShine)" stroke-width="3.5"/>
+            <path d="M44 124 C56 112, 82 118, 96 142 C110 166, 136 166, 166 154 C194 144, 218 118, 242 120 C254 121, 261 130, 256 140" stroke="url(#goldShine)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+            <g stroke="url(#goldShine)" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="0.95">
+              <path d="M74 156 C86 142, 108 148, 104 164 C101 174, 88 176, 86 166 C85 160, 92 157, 96 161"/>
+              <path d="M114 174 C132 168, 152 178, 174 170 C192 164, 206 150, 224 144 C236 140, 246 148, 240 158 C236 164, 227 162, 228 156"/>
+              <path d="M136 179 C146 168, 164 168, 172 178"/>
+              <path d="M200 164 C208 174, 224 174, 232 165"/>
+              <circle cx="154" cy="176" r="2.2" fill="#fef08a" stroke="none"/>
+              <circle cx="215" cy="154" r="2.2" fill="#fef08a" stroke="none"/>
+              <circle cx="80" cy="140" r="2" fill="#fef08a" stroke="none"/>
+            </g>
+            <path d="M98 190 L88 220 M152 192 L144 220 M206 188 L198 220" stroke="url(#goldShine)" stroke-width="5" stroke-linecap="round"/>
+            <path d="M40 220 L238 220 C272 220, 290 198, 284 174 C280 160, 264 156, 256 166 C250 174, 257 185, 267 182" stroke="url(#goldShine)" stroke-width="6.5" stroke-linecap="round" fill="none"/>
+            <path d="M52 218 L232 218" stroke="#fefce8" stroke-width="1.6" stroke-linecap="round" opacity="0.85"/>
+          </g>
+
+          <!-- Capa 3: Riendas luminosas frontales y 3 renos delanteros (incl. Rodolfo) -->
+          <g class="reins-shimmer" filter="url(#psSoftGlow)">
+            <path d="M234 123 Q 338 156, 444 136" stroke="url(#reinGlow)" stroke-width="2" stroke-linecap="round"/>
+            <path d="M234 123 Q 422 164, 588 124" stroke="url(#reinGlow)" stroke-width="1.9" stroke-linecap="round"/>
+            <path d="M234 123 Q 505 166, 732 110" stroke="url(#reinGlow)" stroke-width="1.8" stroke-linecap="round"/>
+          </g>
+          <g id="xmasFrontReindeerLayer"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div id="christmasFinaleConfetti" class="xmas-finale-confetti" aria-hidden="true"></div>
+    <div class="xmas-finale-card">
+      <div class="xmas-finale-glow" aria-hidden="true"></div>
+      <div class="xmas-finale-emblem" aria-hidden="true">
+        <span class="xmas-star-spin">✨</span>
+        <span class="xmas-tree-bounce">🎄</span>
+        <span class="xmas-star-spin">✨</span>
+      </div>
+      <span class="xmas-finale-pill">🎁 Nochebuena • Día 24</span>
+      <h2 id="xmasFinaleTitle" class="xmas-finale-title">¡Feliz Navidad!</h2>
+      <p id="christmasFinaleSubtitle" class="xmas-finale-sub">
+        Has descubierto la última película del Calendario de Adviento de PelisStart.
+      </p>
+
+      <div id="christmasFinaleMovie" class="xmas-finale-movie">
+        <img id="christmasFinalePoster" src="" alt="" />
+        <div class="xmas-finale-movie-info">
+          <strong id="christmasFinaleMovieTitle"></strong>
+          <span id="christmasFinaleMovieMeta"></span>
+        </div>
+      </div>
+
+      <div class="xmas-finale-actions">
+        <button id="christmasFinalePlayBtn" class="btn btn-play snow-capped-btn" type="button">
+          <span>▶ Ver película</span>
+        </button>
+        <button id="christmasFinaleCloseBtn" class="btn btn-glass" type="button">
+          <span>Seguir en el calendario</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>

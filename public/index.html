@@ -62,6 +62,11 @@
           <span class="advent-pill-label">Adviento</span>
         </button>
 
+        <button id="accountBtn" class="account-pill-btn" type="button" title="Cuenta y sincronización en la nube" aria-label="Mi cuenta">
+          <span id="accountAvatarBadge" class="account-avatar-badge" aria-hidden="true">👤</span>
+          <span id="accountBtnLabel" class="account-pill-label">Entrar</span>
+        </button>
+
         <!-- Hamburger Menu Button (Categorías + Navegación móvil) -->
         <button id="mobileMenuBtn" class="hamburger-btn" type="button" aria-label="Abrir menú y categorías"
           aria-expanded="false">
@@ -125,6 +130,8 @@
             <button class="nav-link" data-section="movie" type="button">Películas</button>
             <button class="nav-link" data-section="serial" type="button">Series</button>
             <button class="nav-link" data-section="discover" type="button">Explorar en vivo</button>
+            <button class="nav-link" data-section="favorites" type="button">Mi Lista</button>
+            <button id="mobileAccountBtn" class="nav-link" type="button">Mi Cuenta</button>
           </div>
         </div>
 
@@ -715,6 +722,136 @@
         <button id="christmasFinaleCloseBtn" class="btn btn-glass" type="button">
           <span>Seguir en el calendario</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal (Login / Sign Up) -->
+  <div id="authModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <div class="modal-backdrop" id="authModalBackdrop"></div>
+    <div class="modal-shell auth-modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar">
+        <div class="modal-title-group">
+          <span class="pill-badge pill-accent">Nube PelisStart</span>
+          <h2 id="authModalTitle">Tu Cuenta</h2>
+        </div>
+        <div class="modal-top-actions">
+          <button id="closeAuthModalBtn" class="close-btn" type="button" aria-label="Cerrar ventana de acceso">&times;</button>
+        </div>
+      </div>
+
+      <div class="api-modal-body">
+        <div class="auth-tabs" role="tablist">
+          <button id="authTabLogin" type="button" class="seg-btn active" data-auth-mode="login">Iniciar sesión</button>
+          <button id="authTabSignup" type="button" class="seg-btn" data-auth-mode="signup">Crear cuenta</button>
+        </div>
+
+        <p class="auth-intro">
+          Guarda tus películas vistas, progreso de series, <strong>Mi Lista</strong> y días del Calendario de Adviento sincronizados en todos tus dispositivos.
+        </p>
+
+        <form id="authForm" class="api-form">
+          <div id="authNameField" class="api-field hidden">
+            <div class="api-field-head">
+              <label for="authNameInput">Nombre o apodo</label>
+            </div>
+            <input id="authNameInput" type="text" placeholder="Ej. OscarCine" maxlength="80" autocomplete="nickname" />
+          </div>
+
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="authEmailInput">Correo electrónico</label>
+            </div>
+            <input id="authEmailInput" type="email" placeholder="tu@correo.com" required autocomplete="email" />
+          </div>
+
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="authPasswordInput">Contraseña</label>
+            </div>
+            <input id="authPasswordInput" type="password" placeholder="Mínimo 6 caracteres" minlength="6" required autocomplete="current-password" />
+          </div>
+
+          <div id="authFeedback" class="api-test-output hidden"></div>
+
+          <div class="api-form-actions">
+            <button id="authGuestBtn" class="btn btn-glass btn-sm" type="button">Seguir como invitado</button>
+            <button id="authSubmitBtn" class="btn btn-play btn-sm" type="submit">Entrar a mi cuenta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Profile & Cloud Stats Modal -->
+  <div id="profileModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+    <div class="modal-backdrop" id="profileModalBackdrop"></div>
+    <div class="modal-shell auth-modal-shell">
+      <div class="modal-holiday-bar" aria-hidden="true"></div>
+      <div class="modal-topbar">
+        <div class="modal-title-group">
+          <span class="pill-badge pill-accent">Conectado</span>
+          <h2 id="profileModalTitle">Mi Perfil</h2>
+        </div>
+        <div class="modal-top-actions">
+          <button id="closeProfileModalBtn" class="close-btn" type="button" aria-label="Cerrar perfil">&times;</button>
+        </div>
+      </div>
+
+      <div class="api-modal-body">
+        <div class="profile-header-card">
+          <div id="profileBigAvatar" class="profile-big-avatar">U</div>
+          <div class="profile-user-meta">
+            <strong id="profileDisplayName">Cinéfilo</strong>
+            <span id="profileEmail">correo@ejemplo.com</span>
+          </div>
+        </div>
+
+        <div class="profile-stats-grid">
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="statWatchedCount">0</span>
+            <span class="profile-stat-lbl">Títulos vistos</span>
+          </div>
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="statFavCount">0</span>
+            <span class="profile-stat-lbl">En Mi Lista</span>
+          </div>
+          <div class="profile-stat-card">
+            <span class="profile-stat-val" id="statAdventCount">0/24</span>
+            <span class="profile-stat-lbl">Adviento</span>
+          </div>
+        </div>
+
+        <form id="profileForm" class="api-form">
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="profileNameInput">Nombre visible</label>
+            </div>
+            <input id="profileNameInput" type="text" maxlength="80" placeholder="Tu nombre en PelisStart" />
+          </div>
+
+          <div class="api-field">
+            <div class="api-field-head">
+              <label for="profileProviderSelect">Servidor preferido por defecto</label>
+            </div>
+            <select id="profileProviderSelect" class="profile-select">
+              <option value="">Automático</option>
+            </select>
+          </div>
+
+          <div class="profile-quick-actions">
+            <button id="profileGoFavBtn" class="btn btn-glass btn-sm" type="button">♥ Ver Mi Lista</button>
+            <button id="profileGoAdventBtn" class="btn btn-glass btn-sm" type="button">🎁 Calendario de Adviento</button>
+          </div>
+
+          <div id="profileFeedback" class="api-test-output hidden"></div>
+
+          <div class="api-form-actions">
+            <button id="profileLogoutBtn" class="btn btn-glass btn-sm" type="button">Cerrar sesión</button>
+            <button id="profileSaveBtn" class="btn btn-play btn-sm" type="submit">Guardar cambios</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

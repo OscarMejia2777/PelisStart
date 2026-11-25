@@ -140,6 +140,82 @@ function readApiConfig() {
   };
 }
 
+function readSupabasePublicConfig() {
+  const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const publishableKey = (
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
+  return {
+    url,
+    publishableKey,
+    enabled: Boolean(url && publishableKey),
+  };
+}
+
+async function handleTopPlayed(reqUrl, res) {
+  const supa = readSupabasePublicConfig();
+  if (!supa.enabled) {
+    sendJson(res, 200, { ok: true, enabled: false, items: [] });
+    return;
+  }
+
+  const limitParam = Math.min(30, Math.max(1, Number(reqUrl.searchParams.get('limit')) || 18));
+  const mediaType = reqUrl.searchParams.get('type');
+  const cacheKey = `supabase:top-played:${mediaType || 'all'}:${limitParam}`;
+  const cached = getCache(cacheKey);
+  if (cached) {
+    sendJson(res, 200, cached);
+    return;
+  }
+
+  try {
+    let endpoint =
+      `${supa.url}/rest/v1/media_play_stats` +
+      `?select=media_id,media_type,title,poster,backdrop,year,rating,duration,metadata,total_plays,last_played_at` +
+      `&order=total_plays.desc,last_played_at.desc&limit=${limitParam}`;
+    if (mediaType === 'movie' || mediaType === 'serial') {
+      endpoint += `&media_type=eq.${mediaType}`;
+    }
+
+    const r = await fetchWithTimeout(endpoint, {
+      headers: {
+        apikey: supa.publishableKey,
+        Authorization: `Bearer ${supa.publishableKey}`,
+      },
+    }, 6000);
+
+    if (!r.ok) {
+      throw new Error(`Supabase top-played HTTP ${r.status}`);
+    }
+    const rows = await r.json();
+    const items = (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: row.media_id,
+      type: row.media_type === 'serial' ? 'serial' : 'movie',
+      title: row.title,
+      poster: row.poster || '',
+      backdrop: row.backdrop || '',
+      year: row.year || '',
+      rating: row.rating || '',
+      duration: row.duration || '',
+      totalPlays: Number(row.total_plays) || 1,
+      lastPlayedAt: row.last_played_at || '',
+      categories: Array.isArray(row.metadata?.categories) ? row.metadata.categories : [],
+      synopsis: row.metadata?.synopsis || '',
+      tmdbId: row.metadata?.tmdbId || '',
+      source: row.metadata?.source || 'PelisStart Top',
+      sources: row.metadata?.sources || null,
+    }));
+
+    const payload = { ok: true, enabled: true, items };
+    setCache(cacheKey, payload, 20 * 1000);
+    sendJson(res, 200, payload);
+  } catch (err) {
+    sendJson(res, 200, { ok: false, enabled: true, items: [], error: err.message });
+  }
+}
+
 function writeApiConfig(updates) {
   let current = {};
   try {
@@ -1350,11 +1426,29 @@ async function requestHandler(req, res) {
 
   if (reqUrl.pathname === '/api/health') {
     const cfg = readApiConfig();
+    const supa = readSupabasePublicConfig();
     sendJson(res, 200, {
       ok: true,
       service: 'PelisStart',
       integrations: formatConfigStatus(cfg),
+      supabase: { enabled: supa.enabled },
     });
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/supabase-config' && req.method === 'GET') {
+    const supa = readSupabasePublicConfig();
+    sendJson(res, 200, {
+      ok: true,
+      enabled: supa.enabled,
+      url: supa.enabled ? supa.url : '',
+      publishableKey: supa.enabled ? supa.publishableKey : '',
+    });
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/top-played' && req.method === 'GET') {
+    await handleTopPlayed(reqUrl, res);
     return;
   }
 

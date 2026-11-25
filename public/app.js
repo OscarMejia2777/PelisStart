@@ -1,4 +1,20 @@
 import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
+import {
+  initSupabaseSync,
+  isSupabaseEnabled,
+  signInWithEmail,
+  signUpWithEmail,
+  signOutAccount,
+  updateUserProfile,
+  syncAndHydrateCloudData,
+  cloudSetFavorite,
+  cloudUpsertHistory,
+  cloudUpdateProgress,
+  cloudMarkAdventDay,
+  cloudResetAdventYear,
+  recordGlobalPlayEvent,
+  fetchGlobalTopPlayed,
+} from './supabase-sync.js';
 
 (() => {
   'use strict';
@@ -7,6 +23,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     favorites: 'pelisstart_favorites_v1',
     history: 'pelisstart_history_v1',
     progress: 'pelisstart_progress_v1',
+    watchedEps: 'pelisstart_watched_eps_v1',
     lang: 'pelisstart_lang_v1',
     source: 'pelisstart_source_v1',
     provider: 'pelisstart_provider_v1',
@@ -25,7 +42,12 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     favorites: new Set(loadJson(STORAGE_KEYS.favorites, [])),
     history: loadJson(STORAGE_KEYS.history, []),
     progress: loadJson(STORAGE_KEYS.progress, {}),
+    watchedEpisodes: loadJson(STORAGE_KEYS.watchedEps, {}),
     openedAdventDays: new Set(loadJson(STORAGE_KEYS.advent, [])),
+    topPlayedItems: [],
+    user: null,
+    userProfile: null,
+    authMode: 'login',
     customItemsById: new Map(),
     discoverItems: [],
     discoverSources: [],
@@ -152,6 +174,42 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     adventProgressBadge: document.getElementById('adventProgressBadge'),
     adventRevealAllBtn: document.getElementById('adventRevealAllBtn'),
     adventResetBtn: document.getElementById('adventResetBtn'),
+
+    accountBtn: document.getElementById('accountBtn'),
+    accountAvatarBadge: document.getElementById('accountAvatarBadge'),
+    accountBtnLabel: document.getElementById('accountBtnLabel'),
+    mobileAccountBtn: document.getElementById('mobileAccountBtn'),
+
+    authModal: document.getElementById('authModal'),
+    authModalBackdrop: document.getElementById('authModalBackdrop'),
+    closeAuthModalBtn: document.getElementById('closeAuthModalBtn'),
+    authTabLogin: document.getElementById('authTabLogin'),
+    authTabSignup: document.getElementById('authTabSignup'),
+    authForm: document.getElementById('authForm'),
+    authNameField: document.getElementById('authNameField'),
+    authNameInput: document.getElementById('authNameInput'),
+    authEmailInput: document.getElementById('authEmailInput'),
+    authPasswordInput: document.getElementById('authPasswordInput'),
+    authFeedback: document.getElementById('authFeedback'),
+    authGuestBtn: document.getElementById('authGuestBtn'),
+    authSubmitBtn: document.getElementById('authSubmitBtn'),
+
+    profileModal: document.getElementById('profileModal'),
+    profileModalBackdrop: document.getElementById('profileModalBackdrop'),
+    closeProfileModalBtn: document.getElementById('closeProfileModalBtn'),
+    profileBigAvatar: document.getElementById('profileBigAvatar'),
+    profileDisplayName: document.getElementById('profileDisplayName'),
+    profileEmail: document.getElementById('profileEmail'),
+    statWatchedCount: document.getElementById('statWatchedCount'),
+    statFavCount: document.getElementById('statFavCount'),
+    statAdventCount: document.getElementById('statAdventCount'),
+    profileForm: document.getElementById('profileForm'),
+    profileNameInput: document.getElementById('profileNameInput'),
+    profileProviderSelect: document.getElementById('profileProviderSelect'),
+    profileGoFavBtn: document.getElementById('profileGoFavBtn'),
+    profileGoAdventBtn: document.getElementById('profileGoAdventBtn'),
+    profileFeedback: document.getElementById('profileFeedback'),
+    profileLogoutBtn: document.getElementById('profileLogoutBtn'),
   };
 
   function loadJson(key, fallback) {
@@ -176,6 +234,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       CATALOG.find((item) => item.id === id) ||
       ADVENT_CALENDAR.find((item) => item.id === id) ||
       state.customItemsById.get(id) ||
+      state.topPlayedItems.find((item) => item.id === id) ||
       state.discoverItems.find((item) => item.id === id) ||
       null
     );
@@ -214,15 +273,21 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
   }
 
   function toggleFavorite(id, itemObj = null) {
-    if (itemObj && !CATALOG.some((c) => c.id === id)) {
-      state.customItemsById.set(id, itemObj);
+    const resolved = itemObj || findItemById(id);
+    if (resolved && !CATALOG.some((c) => c.id === id)) {
+      state.customItemsById.set(id, resolved);
     }
+    let added = false;
     if (state.favorites.has(id)) {
       state.favorites.delete(id);
     } else {
       state.favorites.add(id);
+      added = true;
     }
     saveJson(STORAGE_KEYS.favorites, Array.from(state.favorites));
+    if (resolved) {
+      cloudSetFavorite(resolved, added);
+    }
     updateFavBadge();
     renderHero();
     if (state.modal.item && state.modal.item.id === id) {
@@ -231,11 +296,33 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     renderCatalog();
   }
 
-  function recordHistory(item) {
+  function markEpisodeWatchedLocal(mediaId, season, episode) {
+    if (!mediaId) return [];
+    const key = `${Number(season) || 1}x${Number(episode) || 1}`;
+    const list = Array.isArray(state.watchedEpisodes[mediaId]) ? state.watchedEpisodes[mediaId] : [];
+    if (!list.includes(key)) {
+      list.push(key);
+      state.watchedEpisodes[mediaId] = list.slice(-400);
+      saveJson(STORAGE_KEYS.watchedEps, state.watchedEpisodes);
+    }
+    return state.watchedEpisodes[mediaId];
+  }
+
+  function recordHistory(item, opts = {}) {
     if (!item || !item.id) return;
     if (!CATALOG.some((c) => c.id === item.id)) {
       state.customItemsById.set(item.id, item);
     }
+    const existing = state.history.find((entry) => entry.id === item.id);
+    const season = Number(opts.season) || existing?.lastSeason || 1;
+    const episode = Number(opts.episode) || existing?.lastEpisode || 1;
+    const watchedEps =
+      item.type === 'serial'
+        ? markEpisodeWatchedLocal(item.id, season, episode)
+        : Array.isArray(existing?.watchedEpisodes)
+          ? existing.watchedEpisodes
+          : [];
+
     const filtered = state.history.filter((entry) => entry.id !== item.id);
     filtered.unshift({
       id: item.id,
@@ -248,22 +335,45 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       backdrop: item.backdrop,
       categories: item.categories || [],
       synopsis: item.synopsis || '',
+      tmdbId: item.tmdbId || existing?.tmdbId || '',
+      trailerYt: item.trailerYt || existing?.trailerYt || '',
       source: item.source || '',
       sources: item.sources || null,
+      lastSeason: season,
+      lastEpisode: episode,
+      watchedEpisodes: watchedEps,
       ts: Date.now(),
     });
-    state.history = filtered.slice(0, 12);
+    state.history = filtered.slice(0, 24);
     saveJson(STORAGE_KEYS.history, state.history);
+
+    const prog = state.progress[item.id];
+    cloudUpsertHistory(item, {
+      season,
+      episode,
+      watchedEpisodes: watchedEps,
+      progressSeconds: prog?.time || 0,
+      durationSeconds: prog?.duration || 0,
+      incrementPlay: opts.incrementPlay !== false,
+    });
+
+    const epTag = item.type === 'serial' ? `S${season}E${episode}` : 'movie';
+    recordGlobalPlayEvent(item, epTag).then((logged) => {
+      if (logged) setTimeout(() => loadTopPlayedFeed(false), 700);
+    });
   }
 
   function savePlaybackProgress(id, currentTime, duration) {
     if (!id || !Number.isFinite(currentTime) || currentTime < 5) return;
+    const floorTime = Math.floor(currentTime);
+    const floorDur = Number.isFinite(duration) ? Math.floor(duration) : 0;
     state.progress[id] = {
-      time: Math.floor(currentTime),
-      duration: Number.isFinite(duration) ? Math.floor(duration) : 0,
+      time: floorTime,
+      duration: floorDur,
       updatedAt: Date.now(),
     };
     saveJson(STORAGE_KEYS.progress, state.progress);
+    cloudUpdateProgress(id, floorTime, floorDur);
   }
 
   /* ==================== Hero Spotlight ==================== */
@@ -366,7 +476,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     return 'Catálogo';
   }
 
-  function createCardHtml(item) {
+  function createCardHtml(item, rankIdx = null) {
     const isFav = state.favorites.has(item.id);
     const isSeries = item.type === 'serial';
     const savedProg = state.progress[item.id];
@@ -380,9 +490,11 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       savedProg && savedProg.time > 15
         ? `⏱ ${formatSeconds(savedProg.time)}`
         : item.duration || (isSeries ? 'Serie' : 'Película');
+    const playsCount = Number(item.totalPlays) || 0;
+    const hasRank = Number.isInteger(rankIdx) && rankIdx > 0;
 
     return `
-      <article class="media-card holiday-card" data-open-id="${escapeHtml(item.id)}" data-open-type="${escapeHtml(item.type)}">
+      <article class="media-card holiday-card ${hasRank ? 'has-rank' : ''}" data-open-id="${escapeHtml(item.id)}" data-open-type="${escapeHtml(item.type)}">
         <svg class="card-snow-cap" preserveAspectRatio="none" viewBox="0 0 200 20" fill="none" aria-hidden="true">
           <path d="M4 15C14 3 34 2 52 7C70 12 88 2 110 5C130 8 150 2 172 6C184 8 192 11 196 15C184 18 166 13 148 16C128 19 106 13 84 16C62 19 38 13 20 16C12 17 7 16 4 15Z" fill="#f8fafc"/>
         </svg>
@@ -399,10 +511,12 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
                  <div class="poster-fallback hidden">${escapeHtml(item.title)}</div>`
         : `<div class="poster-fallback">${escapeHtml(item.title)}</div>`
       }
+          ${hasRank ? `<span class="card-rank-pill">#${rankIdx}</span>` : ''}
           <div class="card-badges">
             <span class="badge-type ${isSeries ? 'is-series' : ''}">${isSeries ? 'Serie' : 'Película'}</span>
             ${item.rating ? `<span class="badge-rating">★ ${escapeHtml(item.rating)}</span>` : ''}
           </div>
+          ${playsCount > 0 && hasRank ? `<span class="card-plays-pill">🔥 ${playsCount} ${playsCount === 1 ? 'vista' : 'vistas'}</span>` : ''}
           <span class="card-source-badge ${sourceClass}" title="Origen: ${escapeHtml(sourceLabel)}">${escapeHtml(sourceLabel)}</span>
           <div class="card-hover-play">
             <span class="play-circle" aria-hidden="true">
@@ -474,6 +588,19 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
 
       if (state.history.length > 0) {
         blocks.push(renderCarouselSection('Seguir viendo', state.history, null, 'history'));
+      }
+
+      if (state.topPlayedItems.length > 0) {
+        blocks.push(
+          renderCarouselSection(
+            '🏆 Top más vistas en PelisStart',
+            state.topPlayedItems,
+            null,
+            'community-top',
+            'Comunidad',
+            true
+          )
+        );
       }
 
       if (state.sourceFilter !== 'all' && state.sourceFilter !== 'local') {
@@ -802,7 +929,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     `;
   }
 
-  function renderCarouselSection(title, items, categoryLink, rowId, sourceBadge = '') {
+  function renderCarouselSection(title, items, categoryLink, rowId, sourceBadge = '', ranked = false) {
     const flakeSvg = `<svg class="carousel-snowflake" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07"/></svg>`;
     return `
       <div class="section-block">
@@ -822,7 +949,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
           </div>
         </div>
         <div class="media-row" data-row-id="${escapeHtml(rowId)}">
-          ${items.map(createCardHtml).join('')}
+          ${items.map((item, idx) => createCardHtml(item, ranked ? idx + 1 : null)).join('')}
         </div>
       </div>
     `;
@@ -924,6 +1051,10 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
         }
         dom.providerSelect.innerHTML = options.join('');
         if (state.defaultProvider) dom.providerSelect.value = state.defaultProvider;
+        if (dom.profileProviderSelect) {
+          dom.profileProviderSelect.innerHTML = options.join('');
+          if (state.defaultProvider) dom.profileProviderSelect.value = state.defaultProvider;
+        }
       }
     } catch {
       // Keep default Automático option
@@ -1106,12 +1237,16 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       .join('');
 
     const eps = data.episodesBySeason?.[state.modal.activeSeason] || [];
+    const watchedList = state.modal.item && Array.isArray(state.watchedEpisodes[state.modal.item.id])
+      ? state.watchedEpisodes[state.modal.item.id]
+      : [];
     dom.episodesGrid.innerHTML = eps
       .map((ep) => {
         const isCurrent =
           state.modal.episodeSelected &&
           Number(state.modal.season) === ep.season &&
           Number(state.modal.episode) === ep.episode;
+        const isWatched = watchedList.includes(`${ep.season}x${ep.episode}`);
         return `
           <button type="button" class="ep-card ${isCurrent ? 'active' : ''}" data-play-season="${ep.season}" data-play-episode="${ep.episode}">
             ${ep.still
@@ -1122,6 +1257,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
             <div class="ep-info">
               <span class="ep-title">${ep.episode}. ${escapeHtml(ep.title)}</span>
               <span class="ep-sub">${escapeHtml(ep.overview || ep.airdate || `Temporada ${ep.season}`)}</span>
+              ${isWatched ? '<span class="ep-watched-pill">✓ Visto</span>' : ''}
             </div>
           </button>
         `;
@@ -1131,22 +1267,27 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
 
   function openPlayer(item) {
     if (!item) return;
+    const isSeries = item.type === 'serial';
+    const histEntry = state.history.find((h) => h.id === item.id);
+    const savedSeason = isSeries && histEntry?.lastSeason ? Number(histEntry.lastSeason) : 1;
+    const savedEp = isSeries && histEntry?.lastEpisode ? Number(histEntry.lastEpisode) : 1;
+    const hasSavedEpisode = isSeries && Boolean(histEntry && (histEntry.lastSeason > 1 || histEntry.lastEpisode > 1));
+
     state.modal.item = item;
     state.modal.mode = 'standard';
     state.modal.embedApi = 'playlatinsrc';
     state.modal.lang = state.defaultLang;
     state.modal.provider = state.defaultProvider;
-    state.modal.season = 1;
-    state.modal.episode = 1;
-    state.modal.episodeSelected = false;
+    state.modal.season = savedSeason;
+    state.modal.episode = savedEp;
+    state.modal.episodeSelected = hasSavedEpisode;
     state.modal.tmdbId = item.tmdbId || '';
     state.modal.trailerYt = item.trailerYt || '';
     state.modal.episodesData = null;
-    dom.seasonInput.value = '1';
-    dom.episodeInput.value = '1';
+    state.modal.activeSeason = savedSeason;
+    dom.seasonInput.value = String(savedSeason);
+    dom.episodeInput.value = String(savedEp);
     dom.providerSelect.value = state.defaultProvider;
-
-    const isSeries = item.type === 'serial';
     dom.modalTypeBadge.textContent = isSeries ? 'Serie' : 'Película';
     dom.modalTitle.textContent = item.title;
     dom.modalPoster.onerror = () => dom.modalPoster.classList.add('hidden');
@@ -1185,7 +1326,13 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     refreshIframe();
     enrichModalMeta(item);
     loadSeriesEpisodes(item);
-    recordHistory(item);
+    recordHistory(item, { season: state.modal.season, episode: state.modal.episode, incrementPlay: true });
+
+    // Si la película pertenece al calendario de Adviento, sincroniza que ya fue vista
+    const adventEntry = ADVENT_CALENDAR.find((a) => a.id === item.id);
+    if (adventEntry && state.openedAdventDays.has(adventEntry.day)) {
+      cloudMarkAdventDay(new Date().getFullYear(), adventEntry.day, adventEntry.id, true);
+    }
 
     dom.playerModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
@@ -1607,6 +1754,13 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       state.modal.episode = Math.max(1, Number(dom.episodeInput.value) || 1);
       state.modal.episodeSelected = true;
       state.modal.provider = dom.providerSelect.value;
+      if (state.modal.item) {
+        recordHistory(state.modal.item, {
+          season: state.modal.season,
+          episode: state.modal.episode,
+          incrementPlay: false,
+        });
+      }
       renderSeriesEpisodes();
       refreshIframe();
     });
@@ -1615,6 +1769,9 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       state.modal.provider = dom.providerSelect.value;
       state.defaultProvider = state.modal.provider;
       localStorage.setItem(STORAGE_KEYS.provider, state.defaultProvider);
+      if (state.user) {
+        updateUserProfile({ preferred_provider: state.defaultProvider }).catch(() => {});
+      }
       refreshIframe();
     });
 
@@ -1636,6 +1793,9 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
         state.modal.episodeSelected = true;
         dom.seasonInput.value = String(s);
         dom.episodeInput.value = String(ep);
+        if (state.modal.item) {
+          recordHistory(state.modal.item, { season: s, episode: ep, incrementPlay: true });
+        }
         syncModalControls();
         renderSeriesEpisodes();
         refreshIframe();
@@ -1750,6 +1910,7 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       dom.adventResetBtn.addEventListener('click', () => {
         state.openedAdventDays.clear();
         saveJson(STORAGE_KEYS.advent, []);
+        cloudResetAdventYear(new Date().getFullYear());
         renderAdventCalendar();
         showToast('Casillas envueltas de nuevo');
       });
@@ -1774,6 +1935,10 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
         if (!state.openedAdventDays.has(day)) {
           state.openedAdventDays.add(day);
           saveJson(STORAGE_KEYS.advent, Array.from(state.openedAdventDays));
+          const alreadyWatched = Boolean(
+            state.progress[entry.id]?.time > 15 || state.history.some((h) => h.id === entry.id)
+          );
+          cloudMarkAdventDay(new Date().getFullYear(), day, entry.id, alreadyWatched);
           renderAdventCalendar(day);
           showToast(`Día ${day}: ${entry.title}`);
           const allOpened = state.openedAdventDays.size === ADVENT_CALENDAR.length;
@@ -1811,6 +1976,14 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
           closeChristmasFinale();
           return;
         }
+        if (dom.profileModal && !dom.profileModal.classList.contains('hidden')) {
+          closeProfileModal();
+          return;
+        }
+        if (dom.authModal && !dom.authModal.classList.contains('hidden')) {
+          closeAuthModal();
+          return;
+        }
         if (dom.adventModal && !dom.adventModal.classList.contains('hidden')) {
           closeAdventModal();
           return;
@@ -1829,12 +2002,16 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
         document.activeElement !== dom.searchInput &&
         dom.playerModal.classList.contains('hidden') &&
         dom.apiModal.classList.contains('hidden') &&
+        (!dom.authModal || dom.authModal.classList.contains('hidden')) &&
+        (!dom.profileModal || dom.profileModal.classList.contains('hidden')) &&
         (!dom.adventModal || dom.adventModal.classList.contains('hidden'))
       ) {
         e.preventDefault();
         dom.searchInput.focus();
       }
     });
+
+    bindSupabaseAuthEvents();
   }
 
   /* ==================== Calendario de Adviento ==================== */
@@ -2706,9 +2883,398 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       requestAnimationFrame(animarNieve);
     }
 
+    /* ==================== Supabase Account, Cloud Sync & Top Played ==================== */
+    function updateAccountUi() {
+      const user = state.user;
+      const profileName =
+        state.userProfile?.display_name ||
+        user?.user_metadata?.display_name ||
+        (user?.email ? user.email.split('@')[0] : '');
+
+      if (dom.accountBtn) {
+        dom.accountBtn.classList.toggle('is-signed-in', Boolean(user));
+        if (user) {
+          const initial = (profileName || 'U').trim().charAt(0).toUpperCase();
+          if (dom.accountAvatarBadge) dom.accountAvatarBadge.textContent = initial;
+          if (dom.accountBtnLabel) dom.accountBtnLabel.textContent = profileName || 'Mi cuenta';
+        } else {
+          if (dom.accountAvatarBadge) dom.accountAvatarBadge.textContent = '👤';
+          if (dom.accountBtnLabel) dom.accountBtnLabel.textContent = 'Entrar';
+        }
+      }
+
+      if (dom.mobileAccountBtn) {
+        dom.mobileAccountBtn.textContent = user ? `Perfil (${profileName || 'Cuenta'})` : 'Iniciar sesión / Cuenta';
+      }
+
+      if (dom.profileModal && !dom.profileModal.classList.contains('hidden') && user) {
+        populateProfileModal();
+      }
+    }
+
+    function setAuthMode(mode) {
+      state.authMode = mode === 'signup' ? 'signup' : 'login';
+      const isSignup = state.authMode === 'signup';
+      if (dom.authTabLogin) dom.authTabLogin.classList.toggle('active', !isSignup);
+      if (dom.authTabSignup) dom.authTabSignup.classList.toggle('active', isSignup);
+      if (dom.authNameField) dom.authNameField.classList.toggle('hidden', !isSignup);
+      if (dom.authSubmitBtn) dom.authSubmitBtn.textContent = isSignup ? 'Crear mi cuenta' : 'Entrar a mi cuenta';
+      if (dom.authPasswordInput) {
+        dom.authPasswordInput.autocomplete = isSignup ? 'new-password' : 'current-password';
+      }
+      if (dom.authFeedback) {
+        dom.authFeedback.classList.add('hidden');
+        dom.authFeedback.textContent = '';
+      }
+    }
+
+    function openAuthModal(mode = 'login') {
+      if (!dom.authModal) return;
+      if (dom.mobileMenu) dom.mobileMenu.classList.add('hidden');
+      setAuthMode(mode);
+      dom.authModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => dom.authEmailInput?.focus(), 60);
+    }
+
+    function closeAuthModal() {
+      if (!dom.authModal) return;
+      dom.authModal.classList.add('hidden');
+      if (dom.playerModal.classList.contains('hidden') && dom.adventModal.classList.contains('hidden')) {
+        document.body.style.overflow = '';
+      }
+    }
+
+    function populateProfileModal() {
+      const user = state.user;
+      if (!user) return;
+      const displayName =
+        state.userProfile?.display_name ||
+        user.user_metadata?.display_name ||
+        (user.email || '').split('@')[0] ||
+        'Cinéfilo';
+      if (dom.profileBigAvatar) dom.profileBigAvatar.textContent = displayName.charAt(0).toUpperCase();
+      if (dom.profileDisplayName) dom.profileDisplayName.textContent = displayName;
+      if (dom.profileEmail) dom.profileEmail.textContent = user.email || '';
+      if (dom.profileNameInput) dom.profileNameInput.value = displayName;
+      if (dom.profileProviderSelect) dom.profileProviderSelect.value = state.defaultProvider || '';
+      if (dom.statWatchedCount) dom.statWatchedCount.textContent = String(state.history.length);
+      if (dom.statFavCount) dom.statFavCount.textContent = String(state.favorites.size);
+      if (dom.statAdventCount) dom.statAdventCount.textContent = `${state.openedAdventDays.size}/${ADVENT_CALENDAR.length}`;
+    }
+
+    function openProfileModal() {
+      if (!dom.profileModal) return;
+      if (!state.user) {
+        openAuthModal('login');
+        return;
+      }
+      if (dom.mobileMenu) dom.mobileMenu.classList.add('hidden');
+      populateProfileModal();
+      if (dom.profileFeedback) {
+        dom.profileFeedback.classList.add('hidden');
+        dom.profileFeedback.textContent = '';
+      }
+      dom.profileModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeProfileModal() {
+      if (!dom.profileModal) return;
+      dom.profileModal.classList.add('hidden');
+      if (dom.playerModal.classList.contains('hidden') && dom.adventModal.classList.contains('hidden')) {
+        document.body.style.overflow = '';
+      }
+    }
+
+    async function hydrateFromSupabaseUser(user, notifyToast = false) {
+      state.user = user;
+      if (!user) {
+        state.userProfile = null;
+        updateAccountUi();
+        return;
+      }
+
+      try {
+        const currentYear = new Date().getFullYear();
+        const adventWatchedIds = new Set(
+          ADVENT_CALENDAR.filter((a) => state.progress[a.id]?.time > 15 || state.history.some((h) => h.id === a.id)).map((a) => a.id)
+        );
+        const synced = await syncAndHydrateCloudData({
+          localFavorites: state.favorites,
+          localHistory: state.history,
+          localProgress: state.progress,
+          localAdventDays: state.openedAdventDays,
+          localAdventWatchedIds: adventWatchedIds,
+          localProvider: state.defaultProvider,
+          localLang: state.defaultLang,
+          adventYear: currentYear,
+          resolveItemById: findItemById,
+          adventEntries: ADVENT_CALENDAR,
+        });
+
+        if (synced) {
+          state.userProfile = synced.profile || null;
+          if (synced.profile?.preferred_provider && !state.defaultProvider) {
+            state.defaultProvider = synced.profile.preferred_provider;
+            localStorage.setItem(STORAGE_KEYS.provider, state.defaultProvider);
+            if (dom.providerSelect) dom.providerSelect.value = state.defaultProvider;
+          }
+
+          // Hydrate Favorites
+          const favSet = new Set();
+          for (const row of synced.favorites || []) {
+            favSet.add(row.media_id);
+            if (!CATALOG.some((c) => c.id === row.media_id)) {
+              state.customItemsById.set(row.media_id, {
+                id: row.media_id,
+                type: row.media_type === 'serial' ? 'serial' : 'movie',
+                title: row.title,
+                poster: row.poster || '',
+                backdrop: row.backdrop || '',
+                year: row.year || '',
+                rating: row.rating || '',
+                categories: row.metadata?.categories || [],
+                synopsis: row.metadata?.synopsis || '',
+                tmdbId: row.metadata?.tmdbId || '',
+                trailerYt: row.metadata?.trailerYt || '',
+                source: row.metadata?.source || 'Mi Lista',
+                sources: row.metadata?.sources || null,
+              });
+            }
+          }
+          state.favorites = favSet;
+          saveJson(STORAGE_KEYS.favorites, Array.from(favSet));
+
+          // Hydrate History, Progress & Watched Episodes
+          const cloudHist = [];
+          for (const row of synced.history || []) {
+            const entry = {
+              id: row.media_id,
+              title: row.title,
+              type: row.media_type === 'serial' ? 'serial' : 'movie',
+              year: row.year || '',
+              rating: row.rating || '',
+              duration: row.duration || '',
+              poster: row.poster || '',
+              backdrop: row.backdrop || '',
+              categories: row.media_data?.categories || [],
+              synopsis: row.media_data?.synopsis || '',
+              tmdbId: row.media_data?.tmdbId || '',
+              trailerYt: row.media_data?.trailerYt || '',
+              source: row.media_data?.source || '',
+              sources: row.media_data?.sources || null,
+              lastSeason: Number(row.last_season) || 1,
+              lastEpisode: Number(row.last_episode) || 1,
+              watchedEpisodes: Array.isArray(row.watched_episodes) ? row.watched_episodes : [],
+              ts: row.last_watched_at ? new Date(row.last_watched_at).getTime() : Date.now(),
+            };
+            cloudHist.push(entry);
+            if (!CATALOG.some((c) => c.id === row.media_id)) {
+              state.customItemsById.set(row.media_id, entry);
+            }
+            if (Number(row.progress_seconds) > 5) {
+              state.progress[row.media_id] = {
+                time: Number(row.progress_seconds),
+                duration: Number(row.duration_seconds) || 0,
+                updatedAt: entry.ts,
+              };
+            }
+            if (Array.isArray(row.watched_episodes) && row.watched_episodes.length > 0) {
+              state.watchedEpisodes[row.media_id] = row.watched_episodes;
+            }
+          }
+          if (cloudHist.length > 0) {
+            state.history = cloudHist.slice(0, 24);
+            saveJson(STORAGE_KEYS.history, state.history);
+            saveJson(STORAGE_KEYS.progress, state.progress);
+            saveJson(STORAGE_KEYS.watchedEps, state.watchedEpisodes);
+          }
+
+          // Hydrate Advent Calendar Days
+          const { unlockedUpTo } = getAdventDateStatus();
+          const advSet = new Set();
+          for (const row of synced.advent || []) {
+            const d = Number(row.day);
+            if (d >= 1 && d <= unlockedUpTo) advSet.add(d);
+          }
+          if (advSet.size > 0) {
+            state.openedAdventDays = advSet;
+            saveJson(STORAGE_KEYS.advent, Array.from(advSet));
+          }
+
+          updateFavBadge();
+          renderHero();
+          renderCatalog();
+          if (dom.adventModal && !dom.adventModal.classList.contains('hidden')) {
+            renderAdventCalendar();
+          }
+        }
+
+        if (notifyToast) {
+          const name = state.userProfile?.display_name || user.email || 'tu cuenta';
+          showToast(`☁️ Sesión sincronizada como ${name}`);
+        }
+      } catch {
+        // Keep local data intact on transient network failure
+      } finally {
+        updateAccountUi();
+      }
+    }
+
+    async function loadTopPlayedFeed(shouldRender = true) {
+      const items = await fetchGlobalTopPlayed(18);
+      if (!Array.isArray(items)) return;
+      state.topPlayedItems = items;
+      for (const item of items) {
+        if (!CATALOG.some((c) => c.id === item.id)) {
+          state.customItemsById.set(item.id, item);
+        }
+      }
+      if (shouldRender) {
+        renderCatalog();
+      }
+    }
+
+    function bindSupabaseAuthEvents() {
+      if (dom.accountBtn) {
+        dom.accountBtn.addEventListener('click', () => {
+          if (state.user) openProfileModal();
+          else openAuthModal('login');
+        });
+      }
+      if (dom.mobileAccountBtn) {
+        dom.mobileAccountBtn.addEventListener('click', () => {
+          if (state.user) openProfileModal();
+          else openAuthModal('login');
+        });
+      }
+      if (dom.authModalBackdrop) dom.authModalBackdrop.addEventListener('click', closeAuthModal);
+      if (dom.closeAuthModalBtn) dom.closeAuthModalBtn.addEventListener('click', closeAuthModal);
+      if (dom.authGuestBtn) dom.authGuestBtn.addEventListener('click', closeAuthModal);
+      if (dom.authTabLogin) dom.authTabLogin.addEventListener('click', () => setAuthMode('login'));
+      if (dom.authTabSignup) dom.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
+
+      if (dom.authForm) {
+        dom.authForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const email = dom.authEmailInput?.value.trim() || '';
+          const password = dom.authPasswordInput?.value || '';
+          const displayName = dom.authNameInput?.value.trim() || '';
+          if (!email || !password) return;
+
+          if (!isSupabaseEnabled()) {
+            if (dom.authFeedback) {
+              dom.authFeedback.classList.remove('hidden');
+              dom.authFeedback.textContent = '⚠️ Supabase no está configurado en el servidor todavía.';
+            }
+            return;
+          }
+
+          if (dom.authSubmitBtn) dom.authSubmitBtn.disabled = true;
+          if (dom.authFeedback) {
+            dom.authFeedback.classList.remove('hidden');
+            dom.authFeedback.textContent = state.authMode === 'signup' ? 'Creando cuenta...' : 'Iniciando sesión...';
+          }
+
+          try {
+            if (state.authMode === 'signup') {
+              const res = await signUpWithEmail(email, password, displayName);
+              if (!res?.session) {
+                if (dom.authFeedback) {
+                  dom.authFeedback.textContent =
+                    '✅ Cuenta creada. Revisa tu correo para confirmarla (si está activada la verificación) e inicia sesión.';
+                }
+                return;
+              }
+              await hydrateFromSupabaseUser(res.session.user, true);
+              closeAuthModal();
+            } else {
+              const res = await signInWithEmail(email, password);
+              if (res?.user) {
+                await hydrateFromSupabaseUser(res.user, true);
+              }
+              closeAuthModal();
+            }
+          } catch (err) {
+            if (dom.authFeedback) {
+              dom.authFeedback.classList.remove('hidden');
+              dom.authFeedback.textContent = `❌ ${err?.message || 'No se pudo autenticar.'}`;
+            }
+          } finally {
+            if (dom.authSubmitBtn) dom.authSubmitBtn.disabled = false;
+          }
+        });
+      }
+
+      if (dom.profileModalBackdrop) dom.profileModalBackdrop.addEventListener('click', closeProfileModal);
+      if (dom.closeProfileModalBtn) dom.closeProfileModalBtn.addEventListener('click', closeProfileModal);
+
+      if (dom.profileGoFavBtn) {
+        dom.profileGoFavBtn.addEventListener('click', () => {
+          closeProfileModal();
+          state.section = 'favorites';
+          state.page = 1;
+          dom.navLinks.forEach((b) => b.classList.toggle('active', b.dataset.section === 'favorites'));
+          renderCatalog();
+        });
+      }
+
+      if (dom.profileGoAdventBtn) {
+        dom.profileGoAdventBtn.addEventListener('click', () => {
+          closeProfileModal();
+          openAdventModal();
+        });
+      }
+
+      if (dom.profileForm) {
+        dom.profileForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const nextName = dom.profileNameInput?.value.trim() || '';
+          const nextProv = dom.profileProviderSelect?.value || '';
+          try {
+            const updated = await updateUserProfile({
+              display_name: nextName,
+              preferred_provider: nextProv,
+            });
+            state.userProfile = updated || { ...(state.userProfile || {}), display_name: nextName, preferred_provider: nextProv };
+            state.defaultProvider = nextProv;
+            localStorage.setItem(STORAGE_KEYS.provider, nextProv);
+            if (dom.providerSelect) dom.providerSelect.value = nextProv;
+            updateAccountUi();
+            if (dom.profileFeedback) {
+              dom.profileFeedback.classList.remove('hidden');
+              dom.profileFeedback.textContent = '✅ Perfil y servidor guardados en Supabase.';
+            }
+          } catch (err) {
+            if (dom.profileFeedback) {
+              dom.profileFeedback.classList.remove('hidden');
+              dom.profileFeedback.textContent = `❌ ${err?.message || 'Error al guardar perfil.'}`;
+            }
+          }
+        });
+      }
+
+      if (dom.profileLogoutBtn) {
+        dom.profileLogoutBtn.addEventListener('click', async () => {
+          try {
+            await signOutAccount();
+            state.user = null;
+            state.userProfile = null;
+            updateAccountUi();
+            closeProfileModal();
+            showToast('Sesión cerrada');
+          } catch (err) {
+            showToast(`Error: ${err?.message || 'No se pudo cerrar sesión'}`);
+          }
+        });
+      }
+    }
+
     /* ==================== Init ==================== */
     function init() {
       updateFavBadge();
+      updateAccountUi();
       renderHero();
       startHeroRotation();
       renderCategoryRail();
@@ -2718,6 +3284,20 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       loadProviders();
       loadApiConfig();
       loadDiscoverFeed(false);
+      loadTopPlayedFeed(true);
+      initSupabaseSync(async (user, event) => {
+        if (user) {
+          await hydrateFromSupabaseUser(user, event === 'SIGNED_IN');
+        } else {
+          state.user = null;
+          state.userProfile = null;
+          updateAccountUi();
+        }
+      }).then(async ({ user }) => {
+        if (user && !state.user) {
+          await hydrateFromSupabaseUser(user, false);
+        }
+      });
     }
 
     init();

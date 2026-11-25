@@ -980,7 +980,9 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     const isPlayLatin = embedApi === 'playlatinsrc';
 
     dom.embedApiSelect.value = embedApi;
-    dom.modalLangGroup.classList.toggle('hidden', !isPlayLatin || mode === 'download');
+    if (dom.modalLangGroup) {
+      dom.modalLangGroup.classList.toggle('hidden', !isPlayLatin || mode === 'download');
+    }
     dom.modalModeGroup.classList.toggle('hidden', !isPlayLatin || Boolean(isSeries));
     dom.downloadModeBtn.classList.toggle('hidden', Boolean(isSeries) || !isPlayLatin);
     dom.providerWrap.classList.toggle('hidden', !isPlayLatin || mode === 'download');
@@ -991,9 +993,11 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     dom.trailerToggleBtn.classList.toggle('hidden', !trailerYt);
     dom.trailerToggleBtn.querySelector('span').textContent = mode === 'trailer' ? 'Volver al reproductor' : 'Ver tráiler';
 
-    dom.modalLangTabs.querySelectorAll('.seg-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.lang === lang);
-    });
+    if (dom.modalLangTabs) {
+      dom.modalLangTabs.querySelectorAll('.seg-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+    }
     dom.modalModeTabs.querySelectorAll('.seg-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
@@ -1187,7 +1191,130 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
     document.body.style.overflow = 'hidden';
   }
 
+  let isCssRotated = false;
+  let isOrientationLocked = false;
+
+  function syncOrientationButtons() {
+    const rotBtn = document.getElementById('cssRotateBtn');
+    const lockBtn = document.getElementById('orientationLockBtn');
+    const landBtn = document.getElementById('landscapeLockBtn');
+    const exitBtn = document.getElementById('exitRotateBtn');
+    if (rotBtn) rotBtn.classList.toggle('active', isCssRotated);
+    if (exitBtn) exitBtn.classList.toggle('hidden', !isCssRotated);
+    if (lockBtn) {
+      lockBtn.classList.toggle('active', isOrientationLocked || isCssRotated);
+      const span = lockBtn.querySelector('span');
+      if (span) span.textContent = isOrientationLocked || isCssRotated ? '🔒 Giro bloqueado' : '🔒 Bloquear giro';
+    }
+    if (landBtn) {
+      landBtn.classList.toggle('active', Boolean(document.fullscreenElement) || isCssRotated);
+    }
+  }
+
+  function setCssRotated(enabled) {
+    const vp = document.getElementById('playerViewport');
+    isCssRotated = Boolean(enabled && vp);
+    if (vp) vp.classList.toggle('is-rotated-landscape', isCssRotated);
+    syncOrientationButtons();
+  }
+
+  function unlockScreenOrientation() {
+    if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+      try {
+        screen.orientation.unlock();
+      } catch {
+        // Ignore if not locked
+      }
+    }
+    isOrientationLocked = false;
+    syncOrientationButtons();
+  }
+
+  async function enterLandscapeFixed() {
+    const vp = document.getElementById('playerViewport');
+    if (!vp) return;
+
+    // 1. Intentar pantalla completa nativa + bloqueo horizontal real
+    const reqFs = vp.requestFullscreen || vp.webkitRequestFullscreen || vp.msRequestFullscreen;
+    if (reqFs) {
+      try {
+        await reqFs.call(vp);
+      } catch {
+        // Si falla fullscreen nativo, continuamos al fallback CSS
+      }
+    }
+
+    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+      try {
+        await screen.orientation.lock('landscape');
+        isOrientationLocked = true;
+        setCssRotated(false);
+        showToast('📱 Pantalla bloqueada en horizontal');
+        return;
+      } catch {
+        // Dispositivos sin Orientation Lock (ej. iOS Safari o escritorio) -> usar rotación CSS fija
+      }
+    }
+
+    if (!document.fullscreenElement || window.innerHeight > window.innerWidth) {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        try { await document.exitFullscreen(); } catch {}
+      }
+      setCssRotated(true);
+      showToast('📱 Modo horizontal fijo activado');
+    } else {
+      syncOrientationButtons();
+    }
+  }
+
+  async function toggleOrientationLock() {
+    const vp = document.getElementById('playerViewport');
+    if (isOrientationLocked) {
+      unlockScreenOrientation();
+      showToast('🔓 Orientación desbloqueada');
+      return;
+    }
+
+    if (isCssRotated) {
+      setCssRotated(false);
+      showToast('🔓 Giro fijo desactivado');
+      return;
+    }
+
+    if (vp && screen.orientation && typeof screen.orientation.lock === 'function') {
+      const reqFs = vp.requestFullscreen || vp.webkitRequestFullscreen;
+      if (!document.fullscreenElement && reqFs) {
+        try { await reqFs.call(vp); } catch {}
+      }
+      try {
+        const currentType = screen.orientation.type || 'landscape-primary';
+        await screen.orientation.lock(currentType);
+        isOrientationLocked = true;
+        syncOrientationButtons();
+        showToast('🔒 Orientación actual bloqueada');
+        return;
+      } catch {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          try { await document.exitFullscreen(); } catch {}
+        }
+      }
+    }
+
+    // Fallback universal: fija el reproductor en horizontal por CSS sin importar el movimiento del teléfono
+    setCssRotated(true);
+    showToast('🔒 Vista fija horizontal activada');
+  }
+
+  function resetPlayerOrientation() {
+    setCssRotated(false);
+    unlockScreenOrientation();
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
   function closePlayer() {
+    resetPlayerOrientation();
     dom.playerModal.classList.add('hidden');
     dom.embedIframe.src = 'about:blank';
     document.body.style.overflow = '';
@@ -1394,12 +1521,14 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       });
     }
 
-    dom.globalLangSelect.value = state.defaultLang;
-    dom.globalLangSelect.addEventListener('change', () => {
-      state.defaultLang = dom.globalLangSelect.value;
-      localStorage.setItem(STORAGE_KEYS.lang, state.defaultLang);
-      showToast(`Idioma preferido: ${state.defaultLang || 'Automático'}`);
-    });
+    if (dom.globalLangSelect) {
+      dom.globalLangSelect.value = state.defaultLang;
+      dom.globalLangSelect.addEventListener('change', () => {
+        state.defaultLang = dom.globalLangSelect.value;
+        localStorage.setItem(STORAGE_KEYS.lang, state.defaultLang);
+        showToast(`Idioma preferido: ${state.defaultLang || 'Automático'}`);
+      });
+    }
 
     const handleSearchInput = (val) => {
       state.searchQuery = val;
@@ -1577,14 +1706,16 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
       refreshIframe();
     });
 
-    dom.modalLangTabs.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-lang]');
-      if (!btn) return;
-      state.modal.lang = btn.dataset.lang;
-      if (state.modal.mode === 'trailer') state.modal.mode = 'standard';
-      syncModalControls();
-      refreshIframe();
-    });
+    if (dom.modalLangTabs) {
+      dom.modalLangTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-lang]');
+        if (!btn) return;
+        state.modal.lang = btn.dataset.lang;
+        if (state.modal.mode === 'trailer') state.modal.mode = 'standard';
+        syncModalControls();
+        refreshIframe();
+      });
+    }
 
     dom.modalModeTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-mode]');
@@ -1631,6 +1762,36 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
         syncModalControls();
         renderSeriesEpisodes();
         refreshIframe();
+      }
+    });
+
+    const landscapeLockBtn = document.getElementById('landscapeLockBtn');
+    const cssRotateBtn = document.getElementById('cssRotateBtn');
+    const orientationLockBtn = document.getElementById('orientationLockBtn');
+    const exitRotateBtn = document.getElementById('exitRotateBtn');
+
+    if (landscapeLockBtn) {
+      landscapeLockBtn.addEventListener('click', enterLandscapeFixed);
+    }
+    if (cssRotateBtn) {
+      cssRotateBtn.addEventListener('click', () => {
+        setCssRotated(!isCssRotated);
+        showToast(isCssRotated ? '🔄 Reproductor girado 90° en pantalla completa' : 'Vista normal restaurada');
+      });
+    }
+    if (orientationLockBtn) {
+      orientationLockBtn.addEventListener('click', toggleOrientationLock);
+    }
+    if (exitRotateBtn) {
+      exitRotateBtn.addEventListener('click', () => {
+        setCssRotated(false);
+      });
+    }
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && isOrientationLocked) {
+        unlockScreenOrientation();
+      } else {
+        syncOrientationButtons();
       }
     });
 
@@ -1812,6 +1973,10 @@ import { CATALOG, CATEGORIES, ADVENT_CALENDAR } from './catalog.js';
           return;
         }
         if (!dom.playerModal.classList.contains('hidden')) {
+          if (isCssRotated) {
+            setCssRotated(false);
+            return;
+          }
           closePlayer();
           return;
         }

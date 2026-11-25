@@ -1171,6 +1171,44 @@ a {
   color: var(--text);
 }
 
+.player-orient-bar {
+  padding: 6px 20px;
+  background: rgba(7, 9, 15, 0.72);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.orient-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.orient-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+  border-color: var(--border-strong);
+}
+
+.orient-btn.active {
+  background: rgba(229, 9, 20, 0.24);
+  border-color: rgba(229, 9, 20, 0.7);
+  color: #fff;
+}
+
 .player-viewport {
   position: relative;
   width: 100%;
@@ -1184,6 +1222,37 @@ a {
   height: 100%;
   border: 0;
   display: block;
+}
+
+.exit-rotate-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(7, 9, 15, 0.85);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.player-viewport.is-rotated-landscape {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  width: 100dvh;
+  height: 100vw;
+  height: 100dvw;
+  max-height: none;
+  min-height: 0;
+  aspect-ratio: auto;
+  transform: translate(-50%, -50%) rotate(90deg);
+  z-index: 100000;
+  background: #000;
 }
 
 .modal-details {
@@ -1330,35 +1399,61 @@ a {
 
 @media (max-width: 640px) {
   .main-shell {
-    padding-top: 56px;
+    padding-top: 54px;
   }
 
   .nav-inner {
-    padding: 9px 14px;
-    gap: 8px;
+    padding: 8px 12px;
+    gap: 10px;
+  }
+
+  .nav-left {
+    gap: 0;
   }
 
   .brand-logo-img {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
 
   .brand-text {
-    font-size: 1.1rem;
-  }
-
-  .search-wrap {
     display: none;
   }
 
-  .mobile-search-box {
-    display: block;
+  .nav-right {
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
-  .lang-select-wrap {
-    padding: 6px 10px;
-    font-size: 0.78rem;
-    gap: 5px;
+  .search-wrap {
+    display: block;
+    flex: 1 1 0%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .search-snow-cap {
+    width: 52px;
+    left: 10px;
+    top: -6px;
+  }
+
+  .search-icon {
+    left: 10px;
+    width: 14px;
+    height: 14px;
+  }
+
+  .search-wrap input {
+    height: 36px;
+    padding: 7px 28px 7px 30px;
+    font-size: 0.82rem;
+  }
+
+  .mobile-search-box {
+    display: none !important;
   }
 
   .hero {
@@ -1409,28 +1504,109 @@ a {
   }
 
   .modal-topbar {
+    padding: 8px 12px;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .modal-title-group {
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .modal-title-group h2 {
+    font-size: 0.98rem;
+    line-height: 1.25;
   }
 
   .modal-top-actions {
     width: 100%;
     justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .modal-top-actions .btn-sm {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+  }
+
+  .close-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 1.2rem;
   }
 
   .player-controls-bar {
+    padding: 8px 12px;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: 8px;
   }
 
   .control-group {
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .provider-wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .provider-wrap select {
+    width: 100%;
+    padding: 6px 8px;
+  }
+
+  .episode-picker {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .segmented {
+    width: 100%;
+    display: flex;
     flex-wrap: wrap;
+  }
+
+  .segmented .seg-btn {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .player-modal {
+    padding: 4px;
+  }
+
+  .modal-shell {
+    max-width: 100%;
+    max-height: 98vh;
+    border-radius: 12px;
+  }
+
+  .player-orient-bar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .orient-btn {
+    flex: 1 1 auto;
+    padding: 6px 8px;
+    font-size: 0.72rem;
+  }
+
+  .player-viewport {
+    aspect-ratio: auto;
+    min-height: 295px;
+    height: 44vh;
+    max-height: 420px;
   }
 
   .modal-details {
@@ -2705,7 +2881,8 @@ a {
 
 @media (max-width: 640px) {
   .advent-pill-btn {
-    padding: 6px 10px;
+    height: 36px;
+    padding: 0 11px;
     font-size: 0.78rem;
   }
 
@@ -2722,6 +2899,20 @@ a {
     opacity: 1;
     transform: none;
     font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .advent-pill-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 10px;
+    justify-content: center;
+  }
+
+  .advent-pill-label {
+    display: none;
   }
 }
 

@@ -51,26 +51,11 @@
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
           </svg>
-          <input id="searchInput" type="search" placeholder="Buscar película, serie o ID (tt... / TMDB)  [/]"
+          <input id="searchInput" type="search" placeholder="Buscar película o serie..."
             autocomplete="off" aria-label="Buscar películas o series" />
           <button id="clearSearchBtn" class="search-clear hidden" type="button"
             aria-label="Limpiar búsqueda">&times;</button>
         </div>
-
-        <label class="lang-select-wrap" title="Idioma predeterminado del reproductor">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <circle cx="12" cy="12" r="10" />
-            <path
-              d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
-          <select id="globalLangSelect" aria-label="Idioma predeterminado">
-            <option value="">Auto</option>
-            <option value="latino" selected>Latino</option>
-            <option value="castellano">Castellano</option>
-            <option value="subtitulado">Subtitulado</option>
-          </select>
-        </label>
 
         <button id="adventBtn" class="advent-pill-btn" type="button" title="Calendario de Adviento de películas navideñas">
           <span class="advent-pill-icon" aria-hidden="true">🎁</span>
@@ -267,16 +252,6 @@
           </label>
         </div>
 
-        <div id="modalLangGroup" class="control-group">
-          <span class="control-label">Idioma:</span>
-          <div id="modalLangTabs" class="segmented">
-            <button type="button" class="seg-btn" data-lang="">Auto</button>
-            <button type="button" class="seg-btn active" data-lang="latino">Latino</button>
-            <button type="button" class="seg-btn" data-lang="castellano">Castellano</button>
-            <button type="button" class="seg-btn" data-lang="subtitulado">Subtitulado</button>
-          </div>
-        </div>
-
         <div id="modalModeGroup" class="control-group">
           <span class="control-label">Modo:</span>
           <div id="modalModeTabs" class="segmented">
@@ -302,9 +277,23 @@
         </div>
       </div>
 
+      <!-- Player Orientation & Fullscreen Helper Bar -->
+      <div class="player-orient-bar">
+        <button id="landscapeLockBtn" class="orient-btn" type="button" title="Abrir horizontal y bloquear giro">
+          <span>📱 Horizontal fijo</span>
+        </button>
+        <button id="cssRotateBtn" class="orient-btn" type="button" title="Rotar pantalla 90° por CSS (funciona en iOS y Android)">
+          <span>🔄 Girar 90°</span>
+        </button>
+        <button id="orientationLockBtn" class="orient-btn" type="button" title="Bloquear o desbloquear orientación actual">
+          <span>🔒 Bloquear giro</span>
+        </button>
+      </div>
+
       <!-- Responsive Video Frame -->
-      <div class="player-viewport">
-        <iframe id="embedIframe" src="" allowfullscreen
+      <div id="playerViewport" class="player-viewport">
+        <button id="exitRotateBtn" class="exit-rotate-btn hidden" type="button" aria-label="Salir de vista horizontal">✕ Salir</button>
+        <iframe id="embedIframe" src=""
           allow="autoplay; fullscreen; picture-in-picture; encrypted-media" referrerpolicy="origin"></iframe>
       </div>
 

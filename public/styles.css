@@ -974,6 +974,10 @@ a {
   flex-direction: column;
 }
 
+.modal-shell > * {
+  flex-shrink: 0;
+}
+
 .modal-shell::-webkit-scrollbar,
 .episodes-grid::-webkit-scrollbar,
 .season-tabs::-webkit-scrollbar,
@@ -1513,20 +1517,34 @@ a {
   }
 
   .player-modal {
-    padding: 4px;
+    display: block;
+    padding: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-backdrop {
+    position: fixed;
   }
 
   .modal-shell {
+    display: block;
     max-width: 100%;
-    max-height: 98vh;
-    border-radius: 12px;
+    max-height: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 
   .player-viewport {
     aspect-ratio: auto;
-    min-height: 295px;
-    height: 44vh;
-    max-height: 420px;
+    min-height: 450px;
+    height: 60vh;
+    height: 60dvh;
+    max-height: 540px;
   }
 
   .modal-details {

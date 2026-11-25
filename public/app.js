@@ -19,6 +19,8 @@ import {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
+  adminListSubscriptionRequests,
+  adminActivateSubscriptionRequest,
 } from './supabase-sync.js';
 
 (() => {
@@ -57,6 +59,7 @@ import {
     authMode: 'login',
     adminUsers: [],
     adminFilter: '',
+    adminSubscriptionRequests: [],
     customItemsById: new Map(),
     discoverItems: [],
     discoverSources: [],
@@ -215,12 +218,15 @@ import {
     adminCreateFeedback: document.getElementById('adminCreateFeedback'),
     adminSearchInput: document.getElementById('adminSearchInput'),
     adminUsersList: document.getElementById('adminUsersList'),
+    adminPendingCount: document.getElementById('adminPendingCount'),
+    adminRequestsList: document.getElementById('adminRequestsList'),
 
     authModal: document.getElementById('authModal'),
     authModalBackdrop: document.getElementById('authModalBackdrop'),
     closeAuthModalBtn: document.getElementById('closeAuthModalBtn'),
     authTabLogin: document.getElementById('authTabLogin'),
     authTabSignup: document.getElementById('authTabSignup'),
+    authSignupNote: document.getElementById('authSignupNote'),
     authForm: document.getElementById('authForm'),
     authNameField: document.getElementById('authNameField'),
     authNameInput: document.getElementById('authNameInput'),
@@ -2039,8 +2045,6 @@ import {
       }
       if (
         e.key === '/' &&
-        state.user &&
-        state.userProfile?.status !== 'blocked' &&
         document.activeElement !== dom.searchInput &&
         dom.playerModal.classList.contains('hidden') &&
         dom.apiModal.classList.contains('hidden') &&
@@ -2932,7 +2936,6 @@ import {
     }
 
     function loadProtectedAppData() {
-      if (!state.user || state.userProfile?.status === 'blocked') return;
       if (state.appDataLoaded) return;
       state.appDataLoaded = true;
       updateFavBadge();
@@ -2947,53 +2950,7 @@ import {
     }
 
     function applyAccessGateState() {
-      const body = document.body;
-      const isBlocked = Boolean(state.user && state.userProfile?.status === 'blocked');
-      const hasValidSession = Boolean(state.user && !isBlocked);
-
-      if (!state.authResolved) {
-        body.classList.add('auth-checking', 'auth-locked');
-        if (dom.accessGate) dom.accessGate.classList.remove('hidden');
-        if (dom.accessGateChecking) dom.accessGateChecking.classList.remove('hidden');
-        if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
-        return;
-      }
-
-      body.classList.remove('auth-checking');
-
-      if (!hasValidSession) {
-        body.classList.add('auth-locked');
-        state.appDataLoaded = false;
-        state.discoverItems = [];
-        state.topPlayedItems = [];
-        if (dom.catalogContainer) dom.catalogContainer.innerHTML = '';
-        if (dom.playerModal && !dom.playerModal.classList.contains('hidden')) closePlayer();
-        if (dom.adventModal && !dom.adventModal.classList.contains('hidden')) closeAdventModal();
-        if (dom.apiModal && !dom.apiModal.classList.contains('hidden')) closeApiModal();
-        if (dom.profileModal && !dom.profileModal.classList.contains('hidden')) closeProfileModal();
-        if (dom.superAdminModal && !dom.superAdminModal.classList.contains('hidden')) closeSuperAdminModal();
-
-        if (dom.accessGate) dom.accessGate.classList.remove('hidden');
-        if (dom.accessGateChecking) dom.accessGateChecking.classList.add('hidden');
-
-        if (isBlocked) {
-          if (dom.accessGateBlocked) dom.accessGateBlocked.classList.remove('hidden');
-          if (dom.authModal) dom.authModal.classList.add('hidden');
-        } else {
-          if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
-          openAuthModal('login');
-        }
-        return;
-      }
-
-      // Unlocked for active authenticated user
-      body.classList.remove('auth-locked');
-      if (dom.accessGate) dom.accessGate.classList.add('hidden');
-      if (dom.accessGateChecking) dom.accessGateChecking.classList.add('hidden');
-      if (dom.accessGateBlocked) dom.accessGateBlocked.classList.add('hidden');
-      if (dom.authModal && !dom.authModal.classList.contains('hidden')) {
-        closeAuthModal();
-      }
+      document.body.classList.remove('auth-checking', 'auth-locked');
       loadProtectedAppData();
     }
 
@@ -3036,6 +2993,7 @@ import {
       if (dom.authTabLogin) dom.authTabLogin.classList.toggle('active', !isSignup);
       if (dom.authTabSignup) dom.authTabSignup.classList.toggle('active', isSignup);
       if (dom.authNameField) dom.authNameField.classList.toggle('hidden', !isSignup);
+      if (dom.authSignupNote) dom.authSignupNote.classList.toggle('hidden', !isSignup);
       if (dom.authSubmitBtn) dom.authSubmitBtn.textContent = isSignup ? 'Crear mi cuenta' : 'Entrar a mi cuenta';
       if (dom.authPasswordInput) {
         dom.authPasswordInput.autocomplete = isSignup ? 'new-password' : 'current-password';
@@ -3194,6 +3152,55 @@ import {
         .join('');
     }
 
+    function renderAdminSubscriptionRequests() {
+      if (!dom.adminRequestsList) return;
+      const reqs = state.adminSubscriptionRequests || [];
+      const pendingCount = reqs.filter((r) => r.status === 'pending').length;
+      if (dom.adminPendingCount) dom.adminPendingCount.textContent = String(pendingCount);
+      if (reqs.length === 0) {
+        dom.adminRequestsList.innerHTML = `<div class="empty-state"><h3>Sin solicitudes de activación</h3><p>Cuando los usuarios completen el registro, sus datos aparecerán aquí para Soporte.</p></div>`;
+        return;
+      }
+
+      dom.adminRequestsList.innerHTML = reqs
+        .map((r) => {
+          const status = r.status || 'pending';
+          const isPending = status === 'pending';
+          const label = r.display_name || r.username || (r.email ? r.email.split('@')[0] : 'Cinéfilo');
+          const idLine = [r.username ? `@${r.username}` : '', r.email].filter(Boolean).join(' · ') || 'Registro sin identificar';
+          const date = r.created_at ? new Date(r.created_at).toLocaleDateString('es-MX') : '—';
+          const badgeClass = isPending ? '' : status === 'active' ? 'is-active' : 'is-blocked';
+          return `
+            <div class="admin-user-row">
+              <div class="admin-user-info">
+                <div class="admin-user-head">
+                  <strong>${escapeHtml(label)}</strong>
+                  <span class="admin-badge ${badgeClass}">${escapeHtml(isPending ? 'Pendiente' : status === 'active' ? 'Activada' : 'Rechazada')}</span>
+                </div>
+                <div class="admin-user-email">${escapeHtml(idLine)} · Registro: ${escapeHtml(date)}</div>
+              </div>
+              <div class="admin-user-actions">
+                <button type="button" class="btn btn-glass btn-sm" data-admin-request-action="activate" data-request-id="${escapeHtml(r.id)}" ${isPending ? '' : 'disabled'}>
+                  Activar cuenta
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    async function loadAdminSubscriptionRequests() {
+      if (!isSuperAdminUser() || !dom.adminRequestsList) return;
+      try {
+        const res = await adminListSubscriptionRequests();
+        state.adminSubscriptionRequests = Array.isArray(res.requests) ? res.requests : [];
+        renderAdminSubscriptionRequests();
+      } catch {
+        renderAdminSubscriptionRequests();
+      }
+    }
+
     async function loadAdminUsers() {
       if (!isSuperAdminUser() || !dom.adminUsersList) return;
       dom.adminUsersList.innerHTML = `<div class="search-status"><span class="spinner" aria-hidden="true"></span><span>Cargando cuentas...</span></div>`;
@@ -3224,6 +3231,7 @@ import {
       dom.superAdminModal.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
       loadAdminUsers();
+      loadAdminSubscriptionRequests();
     }
 
     function closeSuperAdminModal() {
@@ -3383,7 +3391,6 @@ import {
     }
 
     async function loadTopPlayedFeed(shouldRender = true) {
-      if (!state.user || state.userProfile?.status === 'blocked') return;
       const items = await fetchGlobalTopPlayed(18);
       if (!Array.isArray(items)) return;
       state.topPlayedItems = items;
@@ -3463,9 +3470,7 @@ import {
             const res = await adminCreateUser({ identifier, password, display_name, role });
             if (dom.adminCreateUserForm) dom.adminCreateUserForm.reset();
             if (dom.adminCreateFeedback) {
-              dom.adminCreateFeedback.textContent = res.needsConfirmation
-                ? '✅ Usuario creado. Debe confirmar su correo si la verificación por email está activa.'
-                : '✅ Usuario creado y activado correctamente.';
+              dom.adminCreateFeedback.textContent = '✅ Usuario creado y activado correctamente.';
             }
             await loadAdminUsers();
           } catch (err) {
@@ -3514,6 +3519,27 @@ import {
         });
       }
 
+      if (dom.adminRequestsList) {
+        dom.adminRequestsList.addEventListener('click', async (e) => {
+          const btn = e.target.closest('[data-admin-request-action="activate"]');
+          if (!btn || btn.disabled) return;
+          const requestId = btn.dataset.requestId;
+          const target = (state.adminSubscriptionRequests || []).find((r) => r.id === requestId);
+          if (!target || target.status !== 'pending') return;
+
+          btn.disabled = true;
+          try {
+            await adminActivateSubscriptionRequest(requestId, 'active');
+            showToast('Cuenta activada: el usuario puede iniciar sesión');
+            await loadAdminSubscriptionRequests();
+            await loadAdminUsers();
+          } catch (err) {
+            showToast(`❌ ${err?.message || 'No se pudo activar la solicitud.'}`);
+            btn.disabled = false;
+          }
+        });
+      }
+
       if (dom.blockedLogoutBtn) {
         dom.blockedLogoutBtn.addEventListener('click', async () => {
           await signOutAccount().catch(() => {});
@@ -3557,9 +3583,8 @@ import {
               const res = await signUpWithEmail(email, password, displayName);
               if (!res?.session) {
                 if (dom.authFeedback) {
-                  dom.authFeedback.textContent = res?.needsLogin
-                    ? '✅ Cuenta creada. Ya puedes iniciar sesión con tu usuario o correo.'
-                    : '✅ Cuenta creada. Revisa tu correo para confirmarla (si está activada la verificación) e inicia sesión.';
+                  dom.authFeedback.textContent =
+                    '✅ Solicitud guardada: Soporte revisará tus datos y activará tu cuenta. No se envía ningún correo.';
                 }
                 return;
               }
@@ -3648,37 +3673,14 @@ import {
 
     /* ==================== Init ==================== */
     function init() {
+      document.body.classList.remove('auth-checking', 'auth-locked');
+      state.authResolved = true;
+      state.user = null;
+      state.userProfile = null;
       updateFavBadge();
-      updateAccountUi();
-      applyAccessGateState();
       bindEvents();
       initSnowfall();
-      initSupabaseSync(async (user, event) => {
-        if (user) {
-          await hydrateFromSupabaseUser(user, event === 'SIGNED_IN');
-        } else {
-          state.authResolved = true;
-          state.user = null;
-          state.userProfile = null;
-          updateAccountUi();
-          applyAccessGateState();
-        }
-      }).then(async ({ enabled, user }) => {
-        state.authResolved = true;
-        if (!enabled) {
-          if (dom.authFeedback) {
-            dom.authFeedback.classList.remove('hidden');
-            dom.authFeedback.textContent = '⚠️ Autenticación obligatoria: falta configurar Supabase en el servidor.';
-          }
-          applyAccessGateState();
-          return;
-        }
-        if (user) {
-          await hydrateFromSupabaseUser(user, false);
-        } else {
-          applyAccessGateState();
-        }
-      });
+      loadProtectedAppData();
     }
 
     init();

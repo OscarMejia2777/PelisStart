@@ -11,6 +11,10 @@ Aplicación web de catálogo y reproducción multi-API (**PlayLatinSRC**, **Embe
    ```
 3. Abre `http://localhost:8124`.
 
+## Acceso
+
+La página está abierta: no hay inicio de sesión ni panel de superadmin. Favoritos, historial y calendario de Adviento se guardan en el navegador.
+
 ## Despliegue en Vercel
 
 El proyecto ya incluye `vercel.json` y `api/index.js` para servir los archivos estáticos desde el CDN de Vercel y enrutar `/api/*` a la función serverless de Node.js.

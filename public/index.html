@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es" class="dark">
 
 <head>
@@ -17,24 +17,9 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 
-<body class="auth-checking auth-locked">
+<body>
   <!-- Contenedor del Canvas de Nieve -->
   <canvas id="nieveCanvas" aria-hidden="true"></canvas>
-
-  <!-- Mandatory Auth Access Gate -->
-  <div id="accessGate" class="access-gate">
-    <div id="accessGateChecking" class="access-gate-card">
-      <img src="favicon.png?v=xmas1" alt="PelisStart" width="52" height="52" />
-      <h2>Pelis<span>Start</span></h2>
-      <p>Verificando tu sesión de acceso...</p>
-    </div>
-    <div id="accessGateBlocked" class="access-gate-card hidden">
-      <span class="pill-badge pill-accent">Acceso restringido</span>
-      <h2>Cuenta suspendida</h2>
-      <p>Tu cuenta ha sido bloqueada temporalmente por el administrador de PelisStart.</p>
-      <button id="blockedLogoutBtn" class="btn btn-play btn-sm" type="button">Cerrar sesión y cambiar de cuenta</button>
-    </div>
-  </div>
 
   <!-- Sticky Glass Navbar + Christmas Garland -->
   <header id="navbar" class="navbar">
@@ -76,18 +61,6 @@
           title="Calendario de Adviento de películas navideñas">
           <span class="advent-pill-icon" aria-hidden="true">🎁</span>
           <span class="advent-pill-label">Adviento</span>
-        </button>
-
-        <button id="superAdminBtn" class="admin-pill-btn hidden" type="button"
-          title="Panel Superadmin · Gestión de usuarios" aria-label="Panel Superadmin">
-          <span aria-hidden="true">🛡️</span>
-          <span class="admin-pill-label">Admin</span>
-        </button>
-
-        <button id="accountBtn" class="account-pill-btn" type="button" title="Cuenta y sincronización en la nube"
-          aria-label="Mi cuenta">
-          <span id="accountAvatarBadge" class="account-avatar-badge" aria-hidden="true">👤</span>
-          <span id="accountBtnLabel" class="account-pill-label">Entrar</span>
         </button>
 
         <!-- Hamburger Menu Button (Categorías + Navegación móvil) -->
@@ -178,8 +151,6 @@
             <button class="nav-link" data-section="serial" type="button">Series</button>
             <button class="nav-link" data-section="discover" type="button">Explorar en vivo</button>
             <button class="nav-link" data-section="favorites" type="button">Mi Lista</button>
-            <button id="mobileSuperAdminBtn" class="nav-link hidden" type="button">🛡️ Panel Superadmin</button>
-            <button id="mobileAccountBtn" class="nav-link" type="button">Mi Cuenta</button>
           </div>
         </div>
 
@@ -819,249 +790,6 @@
         <button id="christmasFinaleCloseBtn" class="btn btn-glass" type="button">
           <span>Seguir en el calendario</span>
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Auth Modal (Login / Sign Up) -->
-  <div id="authModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
-    <div class="modal-backdrop" id="authModalBackdrop"></div>
-    <div class="modal-shell auth-modal-shell">
-      <div class="modal-holiday-bar" aria-hidden="true"></div>
-      <div class="modal-topbar">
-        <div class="modal-title-group">
-          <span class="pill-badge pill-accent">Nube PelisStart</span>
-          <h2 id="authModalTitle">Tu Cuenta</h2>
-        </div>
-        <div class="modal-top-actions">
-          <button id="closeAuthModalBtn" class="close-btn" type="button"
-            aria-label="Cerrar ventana de acceso">&times;</button>
-        </div>
-      </div>
-
-      <div class="api-modal-body">
-        <div class="auth-tabs" role="tablist">
-          <button id="authTabLogin" type="button" class="seg-btn active" data-auth-mode="login">Iniciar sesión</button>
-          <button id="authTabSignup" type="button" class="seg-btn" data-auth-mode="signup">Crear cuenta</button>
-        </div>
-
-        <p class="auth-intro">
-          Inicia sesión o crea tu cuenta usando tu <strong>usuario</strong> (ej. <code>usuario2777</code>) o tu
-          <strong>correo electrónico</strong> para guardar tus listas y progreso.
-        </p>
-
-        <form id="authForm" class="api-form">
-          <div id="authNameField" class="api-field hidden">
-            <div class="api-field-head">
-              <label for="authNameInput">Nombre visible (opcional)</label>
-            </div>
-            <input id="authNameInput" type="text" placeholder="Ej. usuario o OscarCine" maxlength="80"
-              autocomplete="nickname" />
-          </div>
-
-          <div class="api-field">
-            <div class="api-field-head">
-              <label for="authEmailInput">Usuario o correo electrónico</label>
-            </div>
-            <input id="authEmailInput" type="text" placeholder="usuario2777 o tu@correo.com" required
-              autocomplete="username" autocapitalize="none" spellcheck="false" />
-          </div>
-
-          <div class="api-field">
-            <div class="api-field-head">
-              <label for="authPasswordInput">Contraseña</label>
-            </div>
-            <div class="password-input-wrap">
-              <input id="authPasswordInput" type="password" placeholder="Mínimo 6 caracteres" minlength="6" required
-                autocomplete="current-password" />
-              <button type="button" class="password-toggle-btn" data-toggle-password="authPasswordInput"
-                aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar u ocultar contraseña">
-                <svg class="icon-eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <svg class="icon-eye-closed hidden" viewBox="0 0 24 24" width="18" height="18" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                  aria-hidden="true">
-                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.81 21.81 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.77 21.77 0 0 1-2.16 3.19" />
-                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div id="authFeedback" class="api-test-output hidden"></div>
-
-          <div class="api-form-actions">
-            <button id="authGuestBtn" class="btn btn-glass btn-sm" type="button">Seguir como invitado</button>
-            <button id="authSubmitBtn" class="btn btn-play btn-sm" type="submit">Entrar a mi cuenta</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- User Profile & Cloud Stats Modal -->
-  <div id="profileModal" class="player-modal hidden" role="dialog" aria-modal="true"
-    aria-labelledby="profileModalTitle">
-    <div class="modal-backdrop" id="profileModalBackdrop"></div>
-    <div class="modal-shell auth-modal-shell">
-      <div class="modal-holiday-bar" aria-hidden="true"></div>
-      <div class="modal-topbar">
-        <div class="modal-title-group">
-          <span class="pill-badge pill-accent">Conectado</span>
-          <h2 id="profileModalTitle">Mi Perfil</h2>
-        </div>
-        <div class="modal-top-actions">
-          <button id="closeProfileModalBtn" class="close-btn" type="button" aria-label="Cerrar perfil">&times;</button>
-        </div>
-      </div>
-
-      <div class="api-modal-body">
-        <div class="profile-header-card">
-          <div id="profileBigAvatar" class="profile-big-avatar">U</div>
-          <div class="profile-user-meta">
-            <strong id="profileDisplayName">Cinéfilo</strong>
-            <span id="profileEmail">correo@ejemplo.com</span>
-          </div>
-        </div>
-
-        <div class="profile-stats-grid">
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="statWatchedCount">0</span>
-            <span class="profile-stat-lbl">Títulos vistos</span>
-          </div>
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="statFavCount">0</span>
-            <span class="profile-stat-lbl">En Mi Lista</span>
-          </div>
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="statAdventCount">0/24</span>
-            <span class="profile-stat-lbl">Adviento</span>
-          </div>
-        </div>
-
-        <form id="profileForm" class="api-form">
-          <div class="api-field">
-            <div class="api-field-head">
-              <label for="profileNameInput">Nombre visible</label>
-            </div>
-            <input id="profileNameInput" type="text" maxlength="80" placeholder="Tu nombre en PelisStart" />
-          </div>
-
-          <div class="api-field">
-            <div class="api-field-head">
-              <label for="profileProviderSelect">Servidor preferido por defecto</label>
-            </div>
-            <select id="profileProviderSelect" class="profile-select">
-              <option value="">Automático</option>
-            </select>
-          </div>
-
-          <div class="profile-quick-actions">
-            <button id="profileGoFavBtn" class="btn btn-glass btn-sm" type="button">♥ Ver Mi Lista</button>
-            <button id="profileGoAdventBtn" class="btn btn-glass btn-sm" type="button">🎁 Calendario de
-              Adviento</button>
-            <button id="profileGoAdminBtn" class="btn btn-glass btn-sm hidden" type="button">🛡️ Panel
-              Superadmin</button>
-          </div>
-
-          <div id="profileFeedback" class="api-test-output hidden"></div>
-
-          <div class="api-form-actions">
-            <button id="profileLogoutBtn" class="btn btn-glass btn-sm" type="button">Cerrar sesión</button>
-            <button id="profileSaveBtn" class="btn btn-play btn-sm" type="submit">Guardar cambios</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Superadmin Module (Only visible & accessible for role=superadmin) -->
-  <div id="superAdminModal" class="player-modal hidden" role="dialog" aria-modal="true"
-    aria-labelledby="superAdminTitle">
-    <div class="modal-backdrop" id="superAdminBackdrop"></div>
-    <div class="modal-shell admin-modal-shell">
-      <div class="modal-holiday-bar" aria-hidden="true"></div>
-      <div class="modal-topbar">
-        <div class="modal-title-group">
-          <span class="pill-badge admin-role-badge">Superadmin</span>
-          <h2 id="superAdminTitle">Gestión de Usuarios</h2>
-        </div>
-        <div class="modal-top-actions">
-          <button id="adminRefreshBtn" class="btn btn-glass btn-sm" type="button">↻ Actualizar</button>
-          <button id="closeSuperAdminBtn" class="close-btn" type="button"
-            aria-label="Cerrar panel Superadmin">&times;</button>
-        </div>
-      </div>
-
-      <div class="api-modal-body admin-modal-body">
-        <div class="admin-kpi-grid">
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="adminTotalUsers">0</span>
-            <span class="profile-stat-lbl">Total usuarios</span>
-          </div>
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="adminActiveUsers">0</span>
-            <span class="profile-stat-lbl">Activos</span>
-          </div>
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="adminBlockedUsers">0</span>
-            <span class="profile-stat-lbl">Bloqueados</span>
-          </div>
-          <div class="profile-stat-card">
-            <span class="profile-stat-val" id="adminSuperCount">0</span>
-            <span class="profile-stat-lbl">Superadmins</span>
-          </div>
-        </div>
-
-        <form id="adminCreateUserForm" class="admin-create-card">
-          <div class="admin-section-head">
-            <strong>+ Crear nueva cuenta</strong>
-            <span id="adminServiceNote" class="admin-note"></span>
-          </div>
-          <div class="admin-create-grid">
-            <input id="adminNewEmail" type="text" placeholder="usuario2777 o correo@usuario.com" required
-              autocomplete="off" autocapitalize="none" spellcheck="false" />
-            <div class="password-input-wrap">
-              <input id="adminNewPassword" type="password" placeholder="Contraseña (mín. 6)" minlength="6" required
-                autocomplete="new-password" />
-              <button type="button" class="password-toggle-btn" data-toggle-password="adminNewPassword"
-                aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar u ocultar contraseña">
-                <svg class="icon-eye-open" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <svg class="icon-eye-closed hidden" viewBox="0 0 24 24" width="17" height="17" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                  aria-hidden="true">
-                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.81 21.81 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.77 21.77 0 0 1-2.16 3.19" />
-                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              </button>
-            </div>
-            <input id="adminNewName" type="text" placeholder="Nombre visible" maxlength="80" autocomplete="off" />
-            <select id="adminNewRole" class="profile-select">
-              <option value="user">Usuario estándar</option>
-              <option value="superadmin">Superadmin</option>
-            </select>
-            <button id="adminCreateSubmitBtn" class="btn btn-play btn-sm" type="submit">Crear cuenta</button>
-          </div>
-          <div id="adminCreateFeedback" class="api-test-output hidden"></div>
-        </form>
-
-        <div class="admin-toolbar">
-          <input id="adminSearchInput" class="admin-search-input" type="search"
-            placeholder="Filtrar por correo, nombre o rol..." autocomplete="off" />
-        </div>
-
-        <div id="adminUsersList" class="admin-users-list"></div>
       </div>
     </div>
   </div>

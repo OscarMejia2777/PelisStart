@@ -163,7 +163,12 @@ export async function signUpWithEmail(identifier, password, displayName) {
     currentUser = sessData?.user || data.session.user || null;
     return { session: currentSession, user: currentUser };
   }
-  return { session: null, user: null, needsConfirmation: Boolean(data?.needsConfirmation), needsLogin: Boolean(data?.needsLogin) };
+  return {
+    session: null,
+    user: null,
+    needsLogin: Boolean(data?.needsLogin),
+    needsSubscriptionActivation: Boolean(data?.needsSubscriptionActivation),
+  };
 }
 
 export async function signOutAccount() {
@@ -597,5 +602,26 @@ export async function adminDeleteUser(userId) {
   });
   const data = await res.json();
   if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudo eliminar el usuario.');
+  return data;
+}
+
+export async function adminListSubscriptionRequests() {
+  const res = await authFetch('/api/admin/subscription-requests');
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudieron cargar las solicitudes de Soporte.');
+  return data;
+}
+
+export async function adminActivateSubscriptionRequest(requestId, status = 'active') {
+  const res = await authFetch(
+    `/api/admin/subscription-requests?request_id=${encodeURIComponent(requestId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || 'No se pudo activar la solicitud de Soporte.');
   return data;
 }

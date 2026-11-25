@@ -1171,44 +1171,6 @@ a {
   color: var(--text);
 }
 
-.player-orient-bar {
-  padding: 6px 20px;
-  background: rgba(7, 9, 15, 0.72);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.orient-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 11px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
-}
-
-.orient-btn:hover {
-  background: rgba(255, 255, 255, 0.13);
-  color: #fff;
-  border-color: var(--border-strong);
-}
-
-.orient-btn.active {
-  background: rgba(229, 9, 20, 0.24);
-  border-color: rgba(229, 9, 20, 0.7);
-  color: #fff;
-}
-
 .player-viewport {
   position: relative;
   width: 100%;
@@ -1222,37 +1184,6 @@ a {
   height: 100%;
   border: 0;
   display: block;
-}
-
-.exit-rotate-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 4;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(7, 9, 15, 0.85);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.player-viewport.is-rotated-landscape {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 100vh;
-  width: 100dvh;
-  height: 100vw;
-  height: 100dvw;
-  max-height: none;
-  min-height: 0;
-  aspect-ratio: auto;
-  transform: translate(-50%, -50%) rotate(90deg);
-  z-index: 100000;
-  background: #000;
 }
 
 .modal-details {
@@ -1589,17 +1520,6 @@ a {
     max-width: 100%;
     max-height: 98vh;
     border-radius: 12px;
-  }
-
-  .player-orient-bar {
-    padding: 6px 10px;
-    gap: 6px;
-  }
-
-  .orient-btn {
-    flex: 1 1 auto;
-    padding: 6px 8px;
-    font-size: 0.72rem;
   }
 
   .player-viewport {
